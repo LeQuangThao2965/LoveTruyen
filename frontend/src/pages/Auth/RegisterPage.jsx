@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../../supabaseClient';
 import { toast } from 'react-toastify'; // Nhớ cài react-toastify nếu chưa
 
 const RegisterPage = () => {
