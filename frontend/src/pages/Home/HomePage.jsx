@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { storyService } from '../services/storyService';
+import { storyService } from '../../services/storyService';
 import { Link } from 'react-router-dom';
 
 const HomePage = () => {
