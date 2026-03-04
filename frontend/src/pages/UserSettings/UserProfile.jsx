@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../supabaseClient';
 import { toast } from 'react-toastify';
-import { FaSave, FaUserCircle, FaKey, FaCamera } from 'react-icons/fa';
+import { FaSave, FaUserCircle, FaKey } from 'react-icons/fa'; // Đã bỏ FaCamera theo yêu cầu
 
 const UserProfile = () => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [userAuth, setUserAuth] = useState(null);
 
-    // State chứa thông tin profile
+    // State chứa thông tin profile (Thêm role)
     const [profile, setProfile] = useState({
         username: '',
         email: '',
         display_name: '',
         avatar_url: '',
-        bio: ''
+        bio: '',
+        role: 'user' // Mặc định là user
     });
 
     // State đổi mật khẩu
@@ -30,16 +31,13 @@ const UserProfile = () => {
     const fetchProfile = async () => {
         try {
             setLoading(true);
-            // 1. Lấy user từ Auth
             const { data: { user } } = await supabase.auth.getUser();
             
             if (!user) {
-                // Chưa login -> Có thể redirect về Home
                 return;
             }
             setUserAuth(user);
 
-            // 2. Lấy chi tiết từ bảng profiles
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
@@ -51,11 +49,11 @@ const UserProfile = () => {
             if (data) {
                 setProfile({
                     username: data.username || '',
-                    // Nếu là email ảo thì ẩn đi cho đẹp, hoặc để trống
                     email: data.email?.includes('@lovetruyen.local') ? '' : data.email,
                     display_name: data.display_name || '',
                     avatar_url: data.avatar_url || '',
-                    bio: data.bio || ''
+                    bio: data.bio || '',
+                    role: data.role || 'user' // Bóc tách role từ DB
                 });
             }
         } catch (error) {
@@ -99,18 +97,11 @@ const UserProfile = () => {
 
     const handleChangePassword = async (e) => {
         e.preventDefault();
-        if (passData.newPassword.length < 6) {
-            return toast.error("Mật khẩu mới phải từ 6 ký tự trở lên");
-        }
-        if (passData.newPassword !== passData.confirmNewPassword) {
-            return toast.error("Xác nhận mật khẩu không khớp");
-        }
+        if (passData.newPassword.length < 6) return toast.error("Mật khẩu mới phải từ 6 ký tự trở lên");
+        if (passData.newPassword !== passData.confirmNewPassword) return toast.error("Xác nhận mật khẩu không khớp");
 
         try {
-            const { error } = await supabase.auth.updateUser({
-                password: passData.newPassword
-            });
-
+            const { error } = await supabase.auth.updateUser({ password: passData.newPassword });
             if (error) throw error;
             toast.success("Đổi mật khẩu thành công!");
             setPassData({ newPassword: '', confirmNewPassword: '' });
@@ -119,8 +110,17 @@ const UserProfile = () => {
         }
     };
 
-    // Logic kiểm tra: Nếu email thật (không chứa @lovetruyen.local) => Là Google User => Ẩn đổi pass
     const isGoogleUser = userAuth?.email && !userAuth.email.includes('@lovetruyen.local');
+
+    // Logic tô màu Badge phân quyền
+    const getRoleBadgeColor = (role) => {
+        switch(role) {
+            case 'admin': return 'bg-red-100 text-red-700 border-red-200';
+            case 'host': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+            case 'moderator': return 'bg-purple-100 text-purple-700 border-purple-200';
+            default: return 'bg-gray-100 text-gray-700 border-gray-200';
+        }
+    };
 
     if (loading) return <div className="text-center p-10">Đang tải hồ sơ...</div>;
 
@@ -129,7 +129,7 @@ const UserProfile = () => {
             <h1 className="text-3xl font-bold text-indigo-700 mb-6 border-b pb-4">Quản Lý Hồ Sơ</h1>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {/* CỘT TRÁI: PREVIEW PROFILE */}
+                {/* CỘT TRÁI */}
                 <div className="col-span-1">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border text-center sticky top-24">
                         <div className="relative inline-block mb-4 group">
@@ -140,18 +140,23 @@ const UserProfile = () => {
                             />
                         </div>
                         <h2 className="text-xl font-bold text-gray-800">{profile.display_name || "Vô danh"}</h2>
-                        <p className="text-indigo-600 font-medium text-sm">
+                        <p className="text-indigo-600 font-medium text-sm mb-2">
                             {profile.username ? `@${profile.username}` : "Google Account"}
                         </p>
+                        
+                        {/* BADGE THỂ HIỆN CHỨC VỤ */}
+                        <span className={`inline-block px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full border ${getRoleBadgeColor(profile.role)}`}>
+                            {profile.role}
+                        </span>
+
                         <p className="text-gray-500 text-sm mt-3 italic">
                             "{profile.bio || "Người dùng này chưa viết gì về mình..."}"
                         </p>
                     </div>
                 </div>
 
-                {/* CỘT PHẢI: FORM EDIT */}
+                {/* CỘT PHẢI */}
                 <div className="col-span-2 space-y-6">
-                    {/* 1. THÔNG TIN CÁ NHÂN */}
                     <div className="bg-white p-6 rounded-2xl shadow-sm border">
                         <h3 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2 border-b pb-2">
                             <FaUserCircle className="text-indigo-500" /> Thông tin chung
@@ -160,75 +165,34 @@ const UserProfile = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tên đăng nhập</label>
-                                    <input 
-                                        type="text" 
-                                        value={profile.username} 
-                                        disabled 
-                                        className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed font-mono text-sm"
-                                        placeholder="Không có username"
-                                    />
+                                    <input type="text" value={profile.username} disabled className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed font-mono text-sm" placeholder="Không có username" />
                                     <p className="text-[10px] text-gray-400 mt-1">Tên đăng nhập không thể thay đổi</p>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email liên kết</label>
-                                    <input 
-                                        type="text" 
-                                        value={profile.email || "Đăng nhập bằng Username"} 
-                                        disabled 
-                                        className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed text-sm"
-                                    />
+                                    <input type="text" value={profile.email || "Đăng nhập bằng Username"} disabled className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed text-sm" />
                                 </div>
                             </div>
-
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Tên hiển thị (Display Name)</label>
-                                <input 
-                                    type="text" 
-                                    name="display_name"
-                                    value={profile.display_name} 
-                                    onChange={handleProfileChange}
-                                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                                />
+                                <input type="text" name="display_name" value={profile.display_name} onChange={handleProfileChange} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition" />
                             </div>
-
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Link Ảnh đại diện</label>
-                                <div className="flex gap-2">
-                                    <input 
-                                        type="text" 
-                                        name="avatar_url"
-                                        value={profile.avatar_url} 
-                                        onChange={handleProfileChange}
-                                        placeholder="https://imgur.com/..."
-                                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                                    />
-                                </div>
+                                <input type="text" name="avatar_url" value={profile.avatar_url} onChange={handleProfileChange} placeholder="https://imgur.com/..." className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition" />
                             </div>
-
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Giới thiệu (Bio)</label>
-                                <textarea 
-                                    name="bio"
-                                    value={profile.bio} 
-                                    onChange={handleProfileChange}
-                                    rows="3"
-                                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                                ></textarea>
+                                <textarea name="bio" value={profile.bio} onChange={handleProfileChange} rows="3" className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition"></textarea>
                             </div>
-
                             <div className="text-right pt-2">
-                                <button 
-                                    type="submit" 
-                                    disabled={saving}
-                                    className="bg-indigo-600 text-white px-6 py-2.5 rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 ml-auto shadow-md active:scale-95"
-                                >
+                                <button type="submit" disabled={saving} className="bg-indigo-600 text-white px-6 py-2.5 rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 ml-auto shadow-md active:scale-95">
                                     <FaSave /> {saving ? 'Đang lưu...' : 'Lưu Thay Đổi'}
                                 </button>
                             </div>
                         </form>
                     </div>
 
-                    {/* 2. ĐỔI MẬT KHẨU (Chỉ hiện nếu không phải Google User) */}
                     {!isGoogleUser && (
                         <div className="bg-white p-6 rounded-2xl shadow-sm border">
                             <h3 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2 border-b pb-2">
@@ -238,30 +202,15 @@ const UserProfile = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 mb-1">Mật khẩu mới</label>
-                                        <input 
-                                            type="password" 
-                                            name="newPassword"
-                                            value={passData.newPassword}
-                                            onChange={handlePassChange}
-                                            className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                                        />
+                                        <input type="password" name="newPassword" value={passData.newPassword} onChange={handlePassChange} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition" />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 mb-1">Xác nhận mật khẩu mới</label>
-                                        <input 
-                                            type="password" 
-                                            name="confirmNewPassword"
-                                            value={passData.confirmNewPassword}
-                                            onChange={handlePassChange}
-                                            className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                                        />
+                                        <input type="password" name="confirmNewPassword" value={passData.confirmNewPassword} onChange={handlePassChange} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition" />
                                     </div>
                                 </div>
                                 <div className="text-right pt-2">
-                                    <button 
-                                        type="submit"
-                                        className="bg-gray-800 text-white px-6 py-2.5 rounded-lg hover:bg-gray-900 transition shadow-md active:scale-95"
-                                    >
+                                    <button type="submit" className="bg-gray-800 text-white px-6 py-2.5 rounded-lg hover:bg-gray-900 transition shadow-md active:scale-95">
                                         Cập Nhật Mật Khẩu
                                     </button>
                                 </div>
