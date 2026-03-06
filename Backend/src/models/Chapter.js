@@ -1,5 +1,5 @@
 // models/Chapter.js
-import mongoose from 'mongoose';
+const mongoose = require('mongoose');
 
 const chapterSchema = new mongoose.Schema({
     // Khóa ngoại (Tham chiếu đến _id của bảng Book)
@@ -28,4 +28,4 @@ const chapterSchema = new mongoose.Schema({
 // Tạo Index để truy vấn nhanh danh sách chương của một bộ truyện
 chapterSchema.index({ book_id: 1, chapter_number: 1 });
 
-export default mongoose.model('Chapter', chapterSchema);
+module.exports = mongoose.model('Chapter', chapterSchema);

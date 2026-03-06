@@ -1,42 +1,37 @@
-// backend/server.js
-// Backend/server.js (Cập nhật mới nhất)
+// Backend/server.js
 const express = require('express');
-const http = require('http'); // <--- Mới
+const http = require('http');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const connectDB = require('./src/configs/mongodb');
-const { initSocket } = require('./src/configs/socket'); // <--- Mới
+const { initSocket } = require('./src/configs/socket');
+const { startCrawlerCron } = require('./src/crawler/scraper');
+
+const storyRoutes = require('./src/routes/storyRoutes');
+const chapterRoutes = require('./src/routes/chapterRoutes');
+const bookRoutes = require('./src/routes/bookRoutes');
+const crawlerRoutes = require('./src/routes/crawlerRoutes');
 
 dotenv.config();
 
-// Import Routes
-const storyRoutes = require('./src/routes/storyRoutes');
-const chapterRoutes = require('./src/routes/chapterRoutes'); // <--- Mới
-
 const app = express();
-const server = http.createServer(app); // <--- Tạo HTTP Server bọc Express
+const server = http.createServer(app);
 
-// Init Socket.io
-initSocket(server); // <--- Kích hoạt Socket
-
-// Connect DB
+initSocket(server);
 connectDB();
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Routes
 app.use('/api/stories', storyRoutes);
-app.use('/api/chapters', chapterRoutes); // <--- Mới
+app.use('/api/chapters', chapterRoutes);
+app.use('/api/books', bookRoutes);
+app.use('/api/crawler', crawlerRoutes);
+
+// Bat cron crawl metadata (title + cover) theo lich 00:00 va 12:00.
+startCrawlerCron();
 
 const PORT = process.env.PORT || 5000;
-
-// Lưu ý: Dùng server.listen thay vì app.listen
 server.listen(PORT, () => {
-    console.log(`🚀 Server & Socket running on port ${PORT}`);
+    console.log(`Server & Socket running on port ${PORT}`);
 });
-
-
-
-//app.use('/api/stories', routeTruyen);

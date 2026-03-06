@@ -1,62 +1,66 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../../supabaseClient';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { FaPlus, FaEdit, FaTrash, FaBookOpen } from 'react-icons/fa';
+import api from '../../services/axiosConfig';
+import UploadBook from './UploadBook';
 
 const MyBooks = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
     const [books, setBooks] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
     useEffect(() => {
         fetchMyBooks();
     }, []);
 
+    useEffect(() => {
+        if (searchParams.get('openUpload') === '1') {
+            setIsUploadModalOpen(true);
+            searchParams.delete('openUpload');
+            setSearchParams(searchParams, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
+
     const fetchMyBooks = async () => {
         setLoading(true);
         try {
-            // Lấy ID người dùng
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            if (!user) {
+                setBooks([]);
+                return;
+            }
 
-            // TODO: GỌI API LẤY DANH SÁCH TRUYỆN TỪ MONGODB DỰA TRÊN uploader_id
-            // Ví dụ: const response = await axios.get(`http://localhost:5000/api/books?uploader_id=${user.id}`);
-            // setBooks(response.data);
+            const response = await api.get('/books', {
+                params: { uploader_id: user.id }
+            });
 
-            // Tạm thời dùng MOCK DATA (Dữ liệu giả) để hiển thị giao diện
-            setTimeout(() => {
-                setBooks([
-                    {
-                        _id: "mongo_id_1",
-                        title: "Phàm Nhân Tu Tiên",
-                        author: "Vong Ngữ",
-                        status: "Đang ra",
-                        total_chapters: 145,
-                        updatedAt: new Date().toISOString()
-                    },
-                    {
-                        _id: "mongo_id_2",
-                        title: "Đấu Phá Thương Khung",
-                        author: "Thiên Tằm Thổ Đậu",
-                        status: "Hoàn thành",
-                        total_chapters: 1641,
-                        updatedAt: new Date(Date.now() - 86400000).toISOString()
-                    }
-                ]);
-                setLoading(false);
-            }, 800);
+            const normalizedBooks = Array.isArray(response)
+                ? response
+                : Array.isArray(response?.books)
+                    ? response.books
+                    : Array.isArray(response?.data)
+                        ? response.data
+                        : [];
 
+            setBooks(normalizedBooks);
         } catch (error) {
-            console.error("Lỗi tải truyện:", error);
+            console.error('Lỗi tải truyện:', error);
+            setBooks([]);
+            toast.error('Không thể tải danh sách truyện. Vui lòng kiểm tra API /api/books.');
+        } finally {
             setLoading(false);
         }
     };
 
-    // Hàm format ngày tháng cho đẹp
     const formatDate = (dateString) => {
+        if (!dateString) return '--';
         const date = new Date(dateString);
-        return new Intl.DateTimeFormat('vi-VN', { 
-            day: '2-digit', month: '2-digit', year: 'numeric', 
-            hour: '2-digit', minute: '2-digit' 
+        return new Intl.DateTimeFormat('vi-VN', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit'
         }).format(date);
     };
 
@@ -65,16 +69,17 @@ const MyBooks = () => {
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-3xl font-extrabold text-gray-800 flex items-center gap-3">
-                        <FaBookOpen className="text-purple-600" /> Quản Lý Truyện Của Tôi
+                        <FaBookOpen className="text-purple-600" /> Quản Lý Truyện Đã Đăng
                     </h1>
-                    <p className="text-gray-500 mt-1">Quản lý, thêm chương và chỉnh sửa các tác phẩm bạn đã đăng.</p>
+                    <p className="text-gray-500 mt-1">Trang quản lý truyện dành cho Host và Admin.</p>
                 </div>
-                <Link 
-                    to="/host/upload" 
+                <button
+                    type="button"
+                    onClick={() => setIsUploadModalOpen(true)}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow-md"
                 >
                     <FaPlus /> Đăng Truyện Mới
-                </Link>
+                </button>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
@@ -84,7 +89,7 @@ const MyBooks = () => {
                     </div>
                 ) : books.length === 0 ? (
                     <div className="p-10 text-center text-gray-500">
-                        Bạn chưa đăng bộ truyện nào. Hãy bắt đầu tác phẩm đầu tiên của mình!
+                        Bạn chưa đăng bộ truyện nào. Hãy bắt đầu tác phẩm đầu tiên của mình.
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
@@ -102,16 +107,16 @@ const MyBooks = () => {
                             <tbody className="divide-y divide-gray-100">
                                 {books.map((book) => (
                                     <tr key={book._id} className="hover:bg-gray-50 transition">
-                                        <td className="px-6 py-4 font-bold text-gray-800">{book.title}</td>
-                                        <td className="px-6 py-4 text-gray-600">{book.author}</td>
+                                        <td className="px-6 py-4 font-bold text-gray-800">{book.title || '--'}</td>
+                                        <td className="px-6 py-4 text-gray-600">{book.author || '--'}</td>
                                         <td className="px-6 py-4 text-center">
                                             <span className="bg-indigo-100 text-indigo-700 py-1 px-3 rounded-full font-bold text-sm">
-                                                {book.total_chapters}
+                                                {book.total_chapters ?? 0}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`py-1 px-3 rounded-full font-bold text-xs ${book.status === 'Đang ra' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
-                                                {book.status}
+                                            <span className={`py-1 px-3 rounded-full font-bold text-xs ${book.status === 'Đang cập nhật' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
+                                                {book.status || 'Đang cập nhật'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-500">
@@ -119,25 +124,22 @@ const MyBooks = () => {
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex justify-center gap-3">
-                                                {/* Nút Thêm Chương Mới */}
-                                                <Link 
-                                                    to={`/upload-chapter/${book._id}`} 
+                                                <Link
+                                                    to={`/upload-chapter/${book._id}`}
                                                     className="p-2 text-white bg-green-500 hover:bg-green-600 rounded-lg transition"
                                                     title="Thêm chương mới"
                                                 >
                                                     <FaPlus size={14} />
                                                 </Link>
-                                                
-                                                {/* Nút Sửa Thông Tin */}
-                                                <button 
+
+                                                <button
                                                     className="p-2 text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition"
                                                     title="Sửa thông tin truyện"
                                                 >
                                                     <FaEdit size={14} />
                                                 </button>
-                                                
-                                                {/* Nút Xóa Truyện */}
-                                                <button 
+
+                                                <button
                                                     className="p-2 text-white bg-red-500 hover:bg-red-600 rounded-lg transition"
                                                     title="Xóa truyện"
                                                 >
@@ -152,6 +154,12 @@ const MyBooks = () => {
                     </div>
                 )}
             </div>
+
+            <UploadBook
+                isOpen={isUploadModalOpen}
+                onClose={() => setIsUploadModalOpen(false)}
+                onSuccess={fetchMyBooks}
+            />
         </div>
     );
 };

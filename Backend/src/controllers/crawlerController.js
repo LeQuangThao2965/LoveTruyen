@@ -1,22 +1,34 @@
-const axios = require('axios');
-const cheerio = require('cheerio'); // Thư viện giống jQuery để bóc HTML
+const { crawlLatestBooksFromTruyenChuCV } = require('../crawler/scraper');
 
-exports.crawlChapter = async (req, res) => {
-    const { url } = req.body; // Link chương truyện cần tải
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 30;
+
+const resolveLimit = (req) => {
+    const rawLimit = req?.query?.limit ?? req?.body?.limit ?? process.env.CRAWLER_LATEST_LIMIT ?? DEFAULT_LIMIT;
+    const parsed = Number(rawLimit);
+
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        return DEFAULT_LIMIT;
+    }
+
+    return Math.min(Math.floor(parsed), MAX_LIMIT);
+};
+
+// Chay crawl thu cong de lay title + cover tu truyenchucv.org.
+exports.runLatestBookCrawl = async (req, res) => {
     try {
-        // 1. Tải HTML
-        const { data } = await axios.get(url);
-        
-        // 2. Load vào Cheerio
-        const $ = cheerio.load(data);
-        
-        // 3. Bóc tách (Phải F12 trang gốc để xem class của nó là gì)
-        // Ví dụ: title nằm trong thẻ .chapter-title, nội dung nằm trong .chapter-c
-        const title = $('.chapter-title').text().trim();
-        const content = $('.chapter-c').html(); // Lấy HTML để giữ định dạng xuống dòng
+        const limit = resolveLimit(req);
+        const result = await crawlLatestBooksFromTruyenChuCV(limit);
 
-        res.json({ success: true, data: { title, content } });
+        return res.status(200).json({
+            message: 'Crawler da chay xong.',
+            ...result
+        });
     } catch (error) {
-        res.status(500).json({ message: "Lỗi khi tải truyện: " + error.message });
+        console.error('[CrawlerController] Loi crawl thu cong:', error);
+        return res.status(500).json({
+            error: 'Khong the crawl du lieu luc nay.',
+            detail: error.message
+        });
     }
 };

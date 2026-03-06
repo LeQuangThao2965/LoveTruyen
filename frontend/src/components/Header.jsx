@@ -249,7 +249,7 @@ const Header = () => {
                                             <Link to="host/dashboard" onClick={() => setIsDropdownOpen(false)} className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition">
                                                 <Icons.Dashboard /> Dashboard
                                             </Link>
-                                            <Link to="host/upload" onClick={() => setIsDropdownOpen(false)} className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 hover:text-green-600 transition">
+                                            <Link to="host/my-books?openUpload=1" onClick={() => setIsDropdownOpen(false)} className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 hover:text-green-600 transition">
                                                 <Icons.Upload /> Đăng truyện
                                             </Link>
                                             <Link to="host/my-books" onClick={() => setIsDropdownOpen(false)} className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition">
