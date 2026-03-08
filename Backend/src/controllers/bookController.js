@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const mongoose = require('mongoose');
 const Book = require('../models/Book');
 
 const MAX_COVER_SIZE_BYTES = 5 * 1024 * 1024;
@@ -97,6 +98,29 @@ exports.getBooks = async (req, res) => {
         console.error('Loi API lay danh sach truyen:', error);
         return res.status(500).json({
             error: 'Khong the lay danh sach truyen. Vui long thu lai.'
+        });
+    }
+};
+
+// GET /api/books/:id
+exports.getBookById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ error: 'Book id khong hop le.' });
+        }
+
+        const book = await Book.findById(id);
+        if (!book) {
+            return res.status(404).json({ error: 'Khong tim thay truyen.' });
+        }
+
+        return res.status(200).json({ book });
+    } catch (error) {
+        console.error('Loi API lay chi tiet truyen:', error);
+        return res.status(500).json({
+            error: 'Khong the lay chi tiet truyen. Vui long thu lai.'
         });
     }
 };

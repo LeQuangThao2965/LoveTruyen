@@ -1,10 +1,23 @@
 const express = require('express');
 const router = express.Router();
-const { addChapter, getChaptersByStory, getChapterDetail } = require('../controllers/chapterController');
+const {
+    addChapter,
+    getChaptersByStory,
+    getChapterByStoryAndNumber,
+    getChapterDetail
+} = require('../controllers/chapterController');
 const verifyToken = require('../middlewares/authMiddleware');
 
-router.get('/story/:storyId', getChaptersByStory); // Lấy list chương
-router.get('/:id', getChapterDetail); // Đọc chương
-router.post('/', verifyToken, addChapter); // Thêm chương (Cần Admin/Uploader)
+// List chapter by story/book id (supports pagination via query page/limit).
+router.get('/story/:storyId', getChaptersByStory);
+
+// Read chapter by chapter number in a story/book.
+router.get('/story/:storyId/chapter/:chapterNumber', getChapterByStoryAndNumber);
+
+// Read chapter by chapter document id.
+router.get('/:id', getChapterDetail);
+
+// Add/update chapter (requires login).
+router.post('/', verifyToken, addChapter);
 
 module.exports = router;

@@ -1,87 +1,218 @@
+const mongoose = require('mongoose');
 const Chapter = require('../models/Chapter');
-const Story = require('../models/Story');
+const Book = require('../models/Book');
 
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 200;
+
+const toObjectId = (value) => {
+    if (!value || typeof value !== 'string') return null;
+    if (!mongoose.Types.ObjectId.isValid(value)) return null;
+    return new mongoose.Types.ObjectId(value);
+};
+
+const parsePositiveInt = (value, fallback = 0) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return Math.floor(parsed);
+};
+
+const buildStoryOrFilters = (storyId) => {
+    const normalized = typeof storyId === 'string' ? storyId.trim() : '';
+    const objectId = toObjectId(normalized);
+
+    if (!normalized && !objectId) return [];
+
+    const filters = [];
+
+    if (objectId) {
+        filters.push({ book_id: objectId });
+        filters.push({ storyId: objectId });
+    }
+
+    if (normalized) {
+        filters.push({ storyId: normalized });
+    }
+
+    return filters;
+};
+
+const normalizeChapter = (chapter, fallbackNumber = 0) => {
+    const chapterNumber = parsePositiveInt(
+        chapter?.chapter_number ?? chapter?.chapterNumber,
+        fallbackNumber
+    );
+
+    return {
+        _id: chapter?._id,
+        title: chapter?.title || `Chuong ${chapterNumber}`,
+        chapter_number: chapterNumber,
+        content: chapter?.content || '',
+        createdAt: chapter?.createdAt,
+        updatedAt: chapter?.updatedAt
+    };
+};
+
+// POST /api/chapters
 exports.addChapter = async (req, res) => {
     try {
-        const { storyId, title, content, chapterNumber } = req.body;
+        const rawBookId = req.body?.book_id || req.body?.storyId || '';
+        const bookId = toObjectId(rawBookId);
+        const chapterNumber = parsePositiveInt(
+            req.body?.chapter_number ?? req.body?.chapterNumber
+        );
+        const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+        const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
 
-        // 1. Tạo chương (Code cũ)
-        const newChapter = new Chapter({ storyId, title, chapterNumber, content });
-        await newChapter.save();
-
-        // 2. Update Story (Code cũ)
-        const story = await Story.findByIdAndUpdate(storyId, {
-            latestChapter: { title, number: chapterNumber, updatedAt: new Date() },
-            $inc: { 'stats.totalChapters': 1 }
-        }, { new: true }); // new: true để lấy data mới nhất sau update
-
-        // --- PHẦN MỚI: XỬ LÝ THÔNG BÁO ---
-
-        // A. Tìm tất cả user đang theo dõi truyện này
-        // Logic: Tìm trong bảng User, những ai có library chứa storyId này
-        const followers = await User.find({ "library.storyId": storyId }).select('supabaseId');
-        
-        if (followers.length > 0) {
-            const io = getIO();
-            const notificationData = {
-                title: `Truyện "${story.title}" có chương mới!`,
-                message: `Chương ${chapterNumber}: ${title} vừa được cập nhật.`,
-                link: `/truyen/${storyId}/chuong/${newChapter._id}`,
-                type: 'new_chapter'
-            };
-
-            // B. Chạy vòng lặp để gửi cho từng người (Có thể tối ưu bằng Queue nếu user đông)
-            const notifyPromises = followers.map(async (follower) => {
-                // 1. Lưu vào Database (Để hiện trong danh sách thông báo)
-                await Notification.create({
-                    userId: follower.supabaseId,
-                    ...notificationData
-                });
-
-                // 2. Bắn Socket (Hiện Popup ngay lập tức nếu đang online)
-                // Gửi vào room trùng tên với ID User
-                io.to(follower.supabaseId).emit("receive_notification", notificationData);
+        if (!bookId) {
+            return res.status(400).json({
+                success: false,
+                message: 'book_id khong hop le.'
             });
-
-            // Chạy song song cho nhanh
-            await Promise.all(notifyPromises);
         }
 
-        res.status(201).json({ success: true, data: newChapter });
+        if (!chapterNumber || !title || !content) {
+            return res.status(400).json({
+                success: false,
+                message: 'Thieu truong bat buoc: chapter_number, title, content.'
+            });
+        }
+
+        const chapter = await Chapter.findOneAndUpdate(
+            { book_id: bookId, chapter_number: chapterNumber },
+            { $set: { title, content } },
+            { new: true, upsert: true, setDefaultsOnInsert: true }
+        );
+
+        const totalChapters = await Chapter.countDocuments({ book_id: bookId });
+        await Book.findByIdAndUpdate(bookId, { total_chapters: totalChapters });
+
+        return res.status(201).json({
+            success: true,
+            data: normalizeChapter(chapter, chapterNumber)
+        });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: error.message });
+        console.error('Loi addChapter:', error);
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
     }
 };
 
-// 2. Lấy danh sách chương của 1 truyện (Chỉ lấy tên, không lấy nội dung để nhẹ)
+// GET /api/chapters/story/:storyId?page=1&limit=50
 exports.getChaptersByStory = async (req, res) => {
     try {
         const { storyId } = req.params;
-        const chapters = await Chapter.find({ storyId })
-            .select('title chapterNumber createdAt views') // Chỉ lấy các trường cần thiết
-            .sort({ chapterNumber: 1 }); // Sắp xếp từ chương 1 -> n
+        const page = parsePositiveInt(req.query?.page, 1);
+        const limit = Math.min(parsePositiveInt(req.query?.limit, DEFAULT_LIMIT), MAX_LIMIT);
+        const skip = (page - 1) * limit;
 
-        res.json({ success: true, data: chapters });
+        const storyFilters = buildStoryOrFilters(storyId);
+        if (storyFilters.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'storyId khong hop le.'
+            });
+        }
+
+        const query = { $or: storyFilters };
+
+        const [chapters, total] = await Promise.all([
+            Chapter.find(query)
+                .select('_id title chapter_number chapterNumber createdAt updatedAt')
+                .sort({ chapter_number: 1, chapterNumber: 1, createdAt: 1 })
+                .skip(skip)
+                .limit(limit),
+            Chapter.countDocuments(query)
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            page,
+            limit,
+            total,
+            totalPages: total > 0 ? Math.ceil(total / limit) : 1,
+            data: chapters.map((chapter, index) =>
+                normalizeChapter(chapter, skip + index + 1)
+            )
+        });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error('Loi getChaptersByStory:', error);
+        return res.status(500).json({ success: false, message: error.message });
     }
 };
 
-// 3. Đọc nội dung 1 chương
+// GET /api/chapters/story/:storyId/chapter/:chapterNumber
+exports.getChapterByStoryAndNumber = async (req, res) => {
+    try {
+        const { storyId, chapterNumber } = req.params;
+        const normalizedChapterNumber = parsePositiveInt(chapterNumber);
+
+        if (!normalizedChapterNumber) {
+            return res.status(400).json({
+                success: false,
+                message: 'chapterNumber khong hop le.'
+            });
+        }
+
+        const storyFilters = buildStoryOrFilters(storyId);
+        if (storyFilters.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'storyId khong hop le.'
+            });
+        }
+
+        const chapter = await Chapter.findOne({
+            $and: [
+                { $or: storyFilters },
+                {
+                    $or: [
+                        { chapter_number: normalizedChapterNumber },
+                        { chapterNumber: normalizedChapterNumber }
+                    ]
+                }
+            ]
+        });
+
+        if (!chapter) {
+            return res.status(404).json({
+                success: false,
+                message: 'Chuong khong ton tai.'
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: normalizeChapter(chapter, normalizedChapterNumber)
+        });
+    } catch (error) {
+        console.error('Loi getChapterByStoryAndNumber:', error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// GET /api/chapters/:id
 exports.getChapterDetail = async (req, res) => {
     try {
         const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Chapter id khong hop le.' });
+        }
+
         const chapter = await Chapter.findById(id);
-        
-        if (!chapter) return res.status(404).json({ message: 'Chương không tồn tại' });
+        if (!chapter) {
+            return res.status(404).json({ success: false, message: 'Chuong khong ton tai.' });
+        }
 
-        // Tăng view (Mỗi lần đọc +1 view) - Có thể tối ưu bằng Redis sau
-        chapter.views += 1;
-        await chapter.save();
-
-        res.json({ success: true, data: chapter });
+        return res.status(200).json({
+            success: true,
+            data: normalizeChapter(chapter)
+        });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error('Loi getChapterDetail:', error);
+        return res.status(500).json({ success: false, message: error.message });
     }
 };

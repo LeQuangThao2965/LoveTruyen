@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import { FaCloudUploadAlt, FaPlay, FaSpider } from 'react-icons/fa';
-import { supabase } from '../../supabaseClient';
 import api from '../../services/axiosConfig';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
@@ -20,7 +19,7 @@ const normalizeCrawledBooks = (payload) => {
         const cover_url = typeof book?.cover_url === 'string' ? book.cover_url.trim() : '';
 
         return {
-            title: title || `Truyen #${index + 1}`,
+            title: title || `Truyện #${index + 1}`,
             href,
             cover_url,
             _crawlKey: href || `${title || 'book'}-${index}`
@@ -36,6 +35,7 @@ const CrawlBooks = () => {
     const [isPosting, setIsPosting] = useState(false);
     const [selectedKeys, setSelectedKeys] = useState([]);
     const [postedKeys, setPostedKeys] = useState([]);
+    const [importStats, setImportStats] = useState({});
     const [itemsPerPage, setItemsPerPage] = useState(20);
     const [currentPage, setCurrentPage] = useState(1);
 
@@ -113,6 +113,7 @@ const CrawlBooks = () => {
             });
             setSelectedKeys([]);
             setPostedKeys([]);
+            setImportStats({});
             setCurrentPage(1);
 
             toast.success(`Crawl xong ${normalizedBooks.length} truyện.`);
@@ -130,15 +131,6 @@ const CrawlBooks = () => {
     const handlePostSelected = async () => {
         if (!canPostSelected) return;
 
-        const {
-            data: { user }
-        } = await supabase.auth.getUser();
-
-        if (!user?.id) {
-            toast.error('Không tìm thấy tài khoản đăng nhập.');
-            return;
-        }
-
         const booksToPost = crawlBooks.filter((book) => selectedKeys.includes(book._crawlKey));
         if (booksToPost.length === 0) {
             toast.error('Vui lòng chọn ít nhất 1 truyện để đăng.');
@@ -149,19 +141,22 @@ const CrawlBooks = () => {
         let successCount = 0;
         let failCount = 0;
         const postedBookKeys = [];
+        const nextStats = {};
 
         for (const book of booksToPost) {
             try {
-                await api.post('/books', {
-                    title: book.title,
-                    author: 'Crawler TruyenChuCV',
-                    description: book.href ? `Nguon crawl: ${book.href}` : 'Du lieu crawl thu cong.',
-                    cover_url: book.cover_url,
-                    uploader_id: user.id
+                const result = await api.post('/crawler/import-story', {
+                    url: book.href,
+                    chapter_concurrency: 4
                 });
 
                 successCount += 1;
                 postedBookKeys.push(book._crawlKey);
+                nextStats[book._crawlKey] = {
+                    chapter_crawled: result?.chapter_crawled ?? 0,
+                    chapter_errors: result?.chapter_errors ?? 0,
+                    stored_chapters: result?.saved_book?.stored_chapters ?? 0
+                };
             } catch (error) {
                 failCount += 1;
             }
@@ -170,13 +165,14 @@ const CrawlBooks = () => {
         if (postedBookKeys.length > 0) {
             setPostedKeys((prev) => Array.from(new Set([...prev, ...postedBookKeys])));
             setSelectedKeys((prev) => prev.filter((key) => !postedBookKeys.includes(key)));
+            setImportStats((prev) => ({ ...prev, ...nextStats }));
         }
 
         if (successCount > 0) {
-            toast.success(`Đăng thành công ${successCount} truyện.`);
+            toast.success(`Đăng thành công ${successCount} truyện (kèm chương).`);
         }
         if (failCount > 0) {
-            toast.warn(`${failCount} truyện đăng thất bại (có thể trùng dữ liệu).`);
+            toast.warn(`${failCount} truyện đăng thất bại hoặc crawl chương lỗi.`);
         }
 
         setIsPosting(false);
@@ -199,7 +195,7 @@ const CrawlBooks = () => {
                         type="url"
                         value={sourceUrl}
                         onChange={(event) => setSourceUrl(event.target.value)}
-                        placeholder="Nhap URL can crawl..."
+                        placeholder="Nhập URL cần crawl..."
                         className="min-w-[280px] flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100"
                     />
 
@@ -209,7 +205,7 @@ const CrawlBooks = () => {
                         disabled={isCrawling}
                         className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-60"
                     >
-                        <FaPlay /> {isCrawling ? 'Dang crawl...' : 'Crawl truyen'}
+                        <FaPlay /> {isCrawling ? 'Đang crawl...' : 'Crawl truyện'}
                     </button>
 
                     <button
@@ -222,16 +218,16 @@ const CrawlBooks = () => {
                                 : 'bg-gray-400 cursor-not-allowed'
                         }`}
                     >
-                        <FaCloudUploadAlt /> {isPosting ? 'Dang dang...' : `Dang da chon (${selectedCount})`}
+                        <FaCloudUploadAlt /> {isPosting ? 'Đang đăng...' : `Đăng đã chọn (${selectedCount})`}
                     </button>
                 </div>
 
                 {crawlMeta && (
                     <div className="mt-3 grid gap-2 text-sm text-gray-600 md:grid-cols-4">
-                        <p><span className="font-semibold">Nguon:</span> {crawlMeta.source}</p>
-                        <p><span className="font-semibold">Da crawl:</span> {crawlMeta.crawled}</p>
-                        <p><span className="font-semibold">Tao moi:</span> {crawlMeta.created}</p>
-                        <p><span className="font-semibold">Cap nhat:</span> {crawlMeta.updated}</p>
+                        <p><span className="font-semibold">Nguồn:</span> {crawlMeta.source}</p>
+                        <p><span className="font-semibold">Đã crawl:</span> {crawlMeta.crawled}</p>
+                        <p><span className="font-semibold">Tạo mới:</span> {crawlMeta.created}</p>
+                        <p><span className="font-semibold">Cập nhật:</span> {crawlMeta.updated}</p>
                     </div>
                 )}
             </div>
@@ -264,6 +260,7 @@ const CrawlBooks = () => {
                                     {paginatedBooks.map((book) => {
                                         const isPosted = postedKeys.includes(book._crawlKey);
                                         const isSelected = selectedKeys.includes(book._crawlKey);
+                                        const stat = importStats[book._crawlKey];
 
                                         return (
                                             <tr key={book._crawlKey} className="transition hover:bg-gray-50">
@@ -294,9 +291,16 @@ const CrawlBooks = () => {
                                                 </td>
                                                 <td className="px-4 py-4 text-center">
                                                     {isPosted ? (
-                                                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
-                                                            Đã đăng
-                                                        </span>
+                                                        <div className="space-y-1">
+                                                            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                                                                Đã đăng
+                                                            </span>
+                                                            {stat && (
+                                                                <p className="text-[11px] text-gray-500">
+                                                                    {stat.stored_chapters} chương, lỗi {stat.chapter_errors}
+                                                                </p>
+                                                            )}
+                                                        </div>
                                                     ) : isSelected ? (
                                                         <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">
                                                             Đã chọn

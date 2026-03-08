@@ -16,8 +16,17 @@ const bookSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    genres: {
+        type: [String],
+        default: []
+    },
     // URL ảnh bìa lấy từ Supabase Storage.
     cover_url: {
+        type: String,
+        default: '',
+        trim: true
+    },
+    crawler_source_url: {
         type: String,
         default: '',
         trim: true
