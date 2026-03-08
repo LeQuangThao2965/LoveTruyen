@@ -6,6 +6,7 @@ import Header from './components/Header';
 import HomePage from './pages/Home/HomePage';
 import UserProfile from './pages/UserSettings/UserProfile';
 import ManageBooks from './pages/HostCT/MyBooks';
+import CrawlBooks from './pages/AdminCT/CrawlBooks';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -32,6 +33,15 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['host', 'admin']}>
                   <ManageBooks />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/crawler"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <CrawlBooks />
                 </ProtectedRoute>
               }
             />

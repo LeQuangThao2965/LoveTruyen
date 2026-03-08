@@ -1,4 +1,38 @@
+const fs = require('fs');
+const path = require('path');
 const Book = require('../models/Book');
+
+const MAX_COVER_SIZE_BYTES = 5 * 1024 * 1024;
+const COVER_UPLOAD_DIR = path.resolve(__dirname, '../../../frontend/public/uploaded_covers');
+const MIME_TO_EXTENSION = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/bmp': 'bmp'
+};
+
+const sanitizeFileName = (value = '') => {
+    const parsedName = path.parse(value).name || 'cover';
+    return parsedName
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .replace(/_+/g, '_')
+        .slice(0, 80);
+};
+
+const parseBase64Image = (value = '') => {
+    const matched = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (!matched) return null;
+
+    const mimeType = matched[1].toLowerCase();
+    const base64Data = matched[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    if (!buffer.length) return null;
+
+    return { mimeType, buffer };
+};
 
 // GET /api/books?uploader_id=<id>&status=<status>&limit=12
 // Tra ve danh sach truyen kem 2 chapter moi nhat cho moi truyen.
@@ -63,6 +97,59 @@ exports.getBooks = async (req, res) => {
         console.error('Loi API lay danh sach truyen:', error);
         return res.status(500).json({
             error: 'Khong the lay danh sach truyen. Vui long thu lai.'
+        });
+    }
+};
+
+// POST /api/books/upload-cover
+exports.uploadBookCover = async (req, res) => {
+    try {
+        const { file_name, file_base64 } = req.body || {};
+
+        if (!file_name || !file_base64) {
+            return res.status(400).json({
+                error: 'Thieu du lieu upload cover: file_name, file_base64.'
+            });
+        }
+
+        const parsedImage = parseBase64Image(file_base64);
+        if (!parsedImage) {
+            return res.status(400).json({
+                error: 'Dinh dang anh khong hop le.'
+            });
+        }
+
+        if (parsedImage.buffer.length > MAX_COVER_SIZE_BYTES) {
+            return res.status(400).json({
+                error: 'Anh bia vuot qua 5MB.'
+            });
+        }
+
+        const extension = MIME_TO_EXTENSION[parsedImage.mimeType];
+        if (!extension) {
+            return res.status(415).json({
+                error: 'Dinh dang anh chua duoc ho tro.'
+            });
+        }
+
+        await fs.promises.mkdir(COVER_UPLOAD_DIR, { recursive: true });
+
+        const safeName = sanitizeFileName(file_name);
+        const finalFileName = `${Date.now()}-${safeName}.${extension}`;
+        const finalFilePath = path.join(COVER_UPLOAD_DIR, finalFileName);
+
+        await fs.promises.writeFile(finalFilePath, parsedImage.buffer);
+
+        const coverPublicUrl = `${req.protocol}://${req.get('host')}/uploaded_covers/${finalFileName}`;
+
+        return res.status(201).json({
+            message: 'Upload cover thanh cong.',
+            cover_url: coverPublicUrl
+        });
+    } catch (error) {
+        console.error('Loi upload cover:', error);
+        return res.status(500).json({
+            error: 'Khong the upload anh bia. Vui long thu lai.'
         });
     }
 };

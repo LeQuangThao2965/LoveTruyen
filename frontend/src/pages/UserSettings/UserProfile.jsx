@@ -6,6 +6,7 @@ import { FaSave, FaUserCircle, FaKey } from 'react-icons/fa'; // Đã bỏ FaCam
 const UserProfile = () => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [changingPassword, setChangingPassword] = useState(false);
     const [userAuth, setUserAuth] = useState(null);
 
     // State chứa thông tin profile (Thêm role)
@@ -20,6 +21,7 @@ const UserProfile = () => {
 
     // State đổi mật khẩu
     const [passData, setPassData] = useState({
+        currentPassword: '',
         newPassword: '',
         confirmNewPassword: ''
     });
@@ -97,20 +99,38 @@ const UserProfile = () => {
 
     const handleChangePassword = async (e) => {
         e.preventDefault();
+        if (!passData.currentPassword) return toast.error("Vui lòng nhập mật khẩu cũ");
         if (passData.newPassword.length < 6) return toast.error("Mật khẩu mới phải từ 6 ký tự trở lên");
         if (passData.newPassword !== passData.confirmNewPassword) return toast.error("Xác nhận mật khẩu không khớp");
+        if (!userAuth?.email) return toast.error("Không thể xác thực mật khẩu cũ cho tài khoản này");
 
+        setChangingPassword(true);
         try {
+            const { error: verifyError } = await supabase.auth.signInWithPassword({
+                email: userAuth.email,
+                password: passData.currentPassword
+            });
+
+            if (verifyError) {
+                toast.error("Mật khẩu cũ không đúng");
+                return;
+            }
+
             const { error } = await supabase.auth.updateUser({ password: passData.newPassword });
             if (error) throw error;
             toast.success("Đổi mật khẩu thành công!");
-            setPassData({ newPassword: '', confirmNewPassword: '' });
+            setPassData({ currentPassword: '', newPassword: '', confirmNewPassword: '' });
         } catch (error) {
             toast.error("Lỗi đổi mật khẩu: " + error.message);
+        } finally {
+            setChangingPassword(false);
         }
     };
 
-    const isGoogleUser = userAuth?.email && !userAuth.email.includes('@lovetruyen.local');
+    const isGoogleUser =
+        userAuth?.app_metadata?.provider === 'google'
+        || userAuth?.app_metadata?.providers?.includes('google')
+        || userAuth?.identities?.some((identity) => identity?.provider === 'google');
 
     // Logic tô màu Badge phân quyền
     const getRoleBadgeColor = (role) => {
@@ -199,6 +219,16 @@ const UserProfile = () => {
                                 <FaKey className="text-orange-500" /> Đổi Mật Khẩu
                             </h3>
                             <form onSubmit={handleChangePassword} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Nhập mật khẩu cũ</label>
+                                    <input
+                                        type="password"
+                                        name="currentPassword"
+                                        value={passData.currentPassword}
+                                        onChange={handlePassChange}
+                                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                                    />
+                                </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 mb-1">Mật khẩu mới</label>
@@ -210,8 +240,8 @@ const UserProfile = () => {
                                     </div>
                                 </div>
                                 <div className="text-right pt-2">
-                                    <button type="submit" className="bg-gray-800 text-white px-6 py-2.5 rounded-lg hover:bg-gray-900 transition shadow-md active:scale-95">
-                                        Cập Nhật Mật Khẩu
+                                    <button type="submit" disabled={changingPassword} className="bg-gray-800 text-white px-6 py-2.5 rounded-lg hover:bg-gray-900 transition shadow-md active:scale-95 disabled:opacity-60">
+                                        {changingPassword ? 'Đang cập nhật...' : 'Cập Nhật Mật Khẩu'}
                                     </button>
                                 </div>
                             </form>

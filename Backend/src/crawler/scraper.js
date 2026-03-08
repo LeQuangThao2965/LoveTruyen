@@ -26,6 +26,24 @@ const fetchHtml = async (url) => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const resolveSourceUrl = (value = HOME_URL) => {
+    const normalized = normalizeText(value || HOME_URL);
+
+    if (!normalized) {
+        return HOME_URL;
+    }
+
+    try {
+        const parsed = new URL(normalized);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+            throw new Error('Unsupported protocol');
+        }
+        return parsed.href;
+    } catch (error) {
+        throw new Error('URL crawl khong hop le.');
+    }
+};
+
 const extractNextData = ($) => {
     const raw = $('script#__NEXT_DATA__').html();
     if (!raw) {
@@ -130,12 +148,13 @@ const upsertBookLite = async (bookLite) => {
 };
 
 // Crawl nhanh: lay title + cover cua 10 truyen moi nhat.
-const crawlLatestBooksFromTruyenChuCV = async (limit = DEFAULT_LIMIT) => {
+const crawlLatestBooksFromTruyenChuCV = async (limit = DEFAULT_LIMIT, sourceUrl = HOME_URL) => {
     const safeLimit = Number.isFinite(Number(limit))
-        ? Math.max(1, Math.min(Number(limit), 30))
+        ? Math.max(1, Math.min(Number(limit), 200))
         : DEFAULT_LIMIT;
+    const normalizedSourceUrl = resolveSourceUrl(sourceUrl);
 
-    const html = await fetchHtml(HOME_URL);
+    const html = await fetchHtml(normalizedSourceUrl);
     const $ = cheerio.load(html);
     const latestBookLinks = parseLatestBookLinksFromHomepage($, safeLimit);
 
@@ -146,7 +165,7 @@ const crawlLatestBooksFromTruyenChuCV = async (limit = DEFAULT_LIMIT) => {
     const latestBooks = [];
     for (const item of latestBookLinks) {
         try {
-            const storyUrl = new URL(item.href, HOME_URL).href;
+            const storyUrl = new URL(item.href, normalizedSourceUrl).href;
             const cover_url = await extractCoverFromStoryPage(storyUrl);
             latestBooks.push({
                 title: item.title,
@@ -180,7 +199,7 @@ const crawlLatestBooksFromTruyenChuCV = async (limit = DEFAULT_LIMIT) => {
     }
 
     return {
-        source: HOME_URL,
+        source: normalizedSourceUrl,
         requested_limit: safeLimit,
         crawled: latestBooks.length,
         created: createdCount,

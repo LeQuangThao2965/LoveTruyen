@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
-import { FaBook, FaUserEdit, FaImage, FaAlignLeft, FaUpload } from 'react-icons/fa';
+import { FaAlignLeft, FaBook, FaImage, FaUpload, FaUserEdit } from 'react-icons/fa';
 import { supabase } from '../../supabaseClient';
 import api from '../../services/axiosConfig';
 
@@ -12,6 +12,14 @@ const defaultForm = {
     description: ''
 };
 
+const readFileAsDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Không thể đọc file ảnh.'));
+        reader.readAsDataURL(file);
+    });
+
 const UploadBook = ({ isOpen, onClose, onSuccess }) => {
     const [loading, setLoading] = useState(false);
     const [uploadingCover, setUploadingCover] = useState(false);
@@ -19,7 +27,6 @@ const UploadBook = ({ isOpen, onClose, onSuccess }) => {
     const [formData, setFormData] = useState(defaultForm);
     const [coverFile, setCoverFile] = useState(null);
 
-    // Preview ảnh từ file local để user kiểm tra trước khi đăng.
     const previewUrl = useMemo(() => {
         if (!coverFile) return '';
         return URL.createObjectURL(coverFile);
@@ -29,7 +36,9 @@ const UploadBook = ({ isOpen, onClose, onSuccess }) => {
         if (!isOpen) return;
 
         const fetchUser = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
+            const {
+                data: { user }
+            } = await supabase.auth.getUser();
             if (user) setUserId(user.id);
         };
 
@@ -38,32 +47,30 @@ const UploadBook = ({ isOpen, onClose, onSuccess }) => {
 
     useEffect(() => {
         return () => {
-            if (previewUrl) {
-                URL.revokeObjectURL(previewUrl);
-            }
+            if (previewUrl) URL.revokeObjectURL(previewUrl);
         };
     }, [previewUrl]);
 
     if (!isOpen) return null;
 
-    const handleChange = (e) => {
-        setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const handleChange = (event) => {
+        setFormData((prev) => ({ ...prev, [event.target.name]: event.target.value }));
     };
 
-    const handleSelectCover = (e) => {
-        const file = e.target.files?.[0];
+    const handleSelectCover = (event) => {
+        const file = event.target.files?.[0];
         if (!file) return;
 
         if (!file.type?.startsWith('image/')) {
             toast.error('Vui lòng chọn đúng file ảnh.');
-            e.target.value = '';
+            event.target.value = '';
             return;
         }
 
         const maxSize = MAX_IMAGE_SIZE_MB * 1024 * 1024;
         if (file.size > maxSize) {
             toast.error(`Ảnh bìa vượt quá ${MAX_IMAGE_SIZE_MB}MB.`);
-            e.target.value = '';
+            event.target.value = '';
             return;
         }
 
@@ -81,53 +88,32 @@ const UploadBook = ({ isOpen, onClose, onSuccess }) => {
         onClose?.();
     };
 
-    const uploadCoverToStorage = async () => {
+    const uploadCoverToLocal = async () => {
         if (!coverFile || !userId) {
             throw new Error('Thiếu ảnh bìa hoặc thông tin tài khoản.');
         }
 
         setUploadingCover(true);
         try {
-            const extension = coverFile.name.split('.').pop()?.toLowerCase() || 'jpg';
-            const baseName = coverFile.name.replace(/\.[^/.]+$/, '');
-            const safeFileName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
-            const filePath = `${userId}/${Date.now()}-${safeFileName}.${extension}`;
+            const fileBase64 = await readFileAsDataUrl(coverFile);
+            const response = await api.post('/books/upload-cover', {
+                file_name: coverFile.name,
+                file_base64: fileBase64
+            });
 
-            const bucketCandidates = ['covers', 'images'];
-            let lastError = null;
-
-            // Thử upload lần lượt vào bucket covers -> images.
-            for (const bucket of bucketCandidates) {
-                const { error: uploadError } = await supabase.storage
-                    .from(bucket)
-                    .upload(filePath, coverFile, {
-                        cacheControl: '3600',
-                        upsert: false
-                    });
-
-                if (uploadError) {
-                    lastError = uploadError;
-                    continue;
-                }
-
-                const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
-                const publicUrl = data?.publicUrl;
-
-                if (publicUrl) {
-                    return publicUrl;
-                }
-
-                lastError = new Error('Không lấy được public URL ảnh bìa.');
+            const coverUrl = response?.cover_url;
+            if (!coverUrl) {
+                throw new Error('Không lấy được đường dẫn ảnh bìa sau khi upload.');
             }
 
-            throw lastError || new Error('Upload ảnh bìa thất bại.');
+            return coverUrl;
         } finally {
             setUploadingCover(false);
         }
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const handleSubmit = async (event) => {
+        event.preventDefault();
 
         if (!userId) {
             toast.error('Không tìm thấy thông tin tài khoản.');
@@ -141,10 +127,8 @@ const UploadBook = ({ isOpen, onClose, onSuccess }) => {
 
         setLoading(true);
         try {
-            // 1) Upload ảnh bìa lên Supabase Storage.
-            const coverUrl = await uploadCoverToStorage();
+            const coverUrl = await uploadCoverToLocal();
 
-            // 2) Gửi thông tin truyện + cover_url lên backend MongoDB.
             const payload = {
                 ...formData,
                 cover_url: coverUrl,
@@ -174,7 +158,7 @@ const UploadBook = ({ isOpen, onClose, onSuccess }) => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={handleClose}>
             <div
                 className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-gray-100 bg-white p-8 shadow-lg animate-fade-in-up"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
             >
                 <div className="mb-8 flex items-start justify-between border-b pb-4">
                     <div>

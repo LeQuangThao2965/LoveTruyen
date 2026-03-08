@@ -41,6 +41,11 @@ const Icons = {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
     ),
+    Crawl: () => (
+        <svg className="w-4 h-4 mr-2 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h5v5H4V4zm11 0h5v5h-5V4zM4 15h5v5H4v-5zm7-4h2m0 0h2m-2 0V9m0 2v2m2 2h5v5h-5v-5z" />
+        </svg>
+    ),
     HostBadge: () => (
         <svg className="w-4 h-4 mr-2 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
@@ -153,6 +158,19 @@ const Header = () => {
         return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`;
     };
 
+    const getRoleBadgeColor = (role) => {
+        switch (role) {
+            case 'admin':
+                return 'bg-red-100 text-red-700 border-red-200';
+            case 'host':
+                return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+            case 'moderator':
+                return 'bg-purple-100 text-purple-700 border-purple-200';
+            default:
+                return 'bg-gray-100 text-gray-700 border-gray-200';
+        }
+    };
+
     return (
         <>
             <header className="bg-white shadow-sm sticky top-0 z-40 border-b border-gray-100">
@@ -198,6 +216,9 @@ const Header = () => {
                                         <Link to="/admin/reports" onClick={() => setIsAdminDropdownOpen(false)} className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition">
                                             <Icons.Report /> Xem báo cáo
                                         </Link>
+                                        <Link to="/admin/crawler" onClick={() => setIsAdminDropdownOpen(false)} className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition">
+                                            <Icons.Crawl /> Crawl truyện
+                                        </Link>
                                     </div>
                                 )}
                             </div>
@@ -205,22 +226,30 @@ const Header = () => {
 
                         {/* 3. NÚT USER (Avatar Dropdown) */}
                         <div className="relative" ref={dropdownRef}>
-                            <button 
-                                onClick={handleUserClick}
-                                className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition focus:outline-none"
-                                title={user ? "Tài khoản" : "Đăng nhập"}
-                            >
-                                {user ? (
-                                    <img 
-                                        src={getAvatarUrl(user)} 
-                                        alt="Avatar" 
-                                        className="w-8 h-8 rounded-full object-cover border border-gray-200 shadow-sm"
-                                        onError={(e) => { e.target.onerror = null; e.target.src = "https://ui-avatars.com/api/?name=U&background=gray&color=fff"; }}
-                                    />
-                                ) : (
-                                    <Icons.User />
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={handleUserClick}
+                                    className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition focus:outline-none"
+                                    title={user ? "Tài khoản" : "Đăng nhập"}
+                                >
+                                    {user ? (
+                                        <img 
+                                            src={getAvatarUrl(user)} 
+                                            alt="Avatar" 
+                                            className="w-8 h-8 rounded-full object-cover border border-gray-200 shadow-sm"
+                                            onError={(e) => { e.target.onerror = null; e.target.src = "https://ui-avatars.com/api/?name=U&background=gray&color=fff"; }}
+                                        />
+                                    ) : (
+                                        <Icons.User />
+                                    )}
+                                </button>
+
+                                {user && (
+                                    <span className={`inline-block px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full border ${getRoleBadgeColor(userRole)}`}>
+                                        {userRole}
+                                    </span>
                                 )}
-                            </button>
+                            </div>
 
                             {/* DROPDOWN MENU */}
                             {user && isDropdownOpen && (
