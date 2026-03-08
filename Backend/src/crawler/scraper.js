@@ -14,6 +14,7 @@ const DETAIL_FETCH_DELAY_MS = 220;
 const DEFAULT_CHAPTER_CONCURRENCY = 4;
 const MAX_CHAPTER_CONCURRENCY = 8;
 const CHAPTER_BATCH_PAUSE_MS = 180;
+const FALLBACK_TEXT = 'Đang cập nhật...';
 
 const normalizeText = (value = '') => value.replace(/\s+/g, ' ').trim();
 const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -118,6 +119,58 @@ const firstNonEmpty = (...values) => {
 
     return '';
 };
+
+const withFallback = (...values) => firstNonEmpty(...values) || FALLBACK_TEXT;
+const isFallbackValue = (value = '') =>
+    normalizeText(String(value || '')).toLowerCase() === FALLBACK_TEXT.toLowerCase();
+
+const extractAuthorFromDom = ($) => {
+    const candidates = [];
+    const selectorGroups = [
+        '[class*="author"] a',
+        '[class*="author"] span',
+        '[id*="author"] a',
+        '[id*="author"] span',
+        'a[href*="/tac-gia/"]',
+        'a[href*="/author/"]',
+        'a[href*="/tac-gia"]'
+    ];
+
+    selectorGroups.forEach((selector) => {
+        $(selector).each((_, element) => {
+            const text = normalizeText($(element).text() || '');
+            if (!text) return;
+
+            const cleaned = text.replace(/^(tác giả|tac gia)\s*[:\-]?\s*/i, '').trim();
+            if (!cleaned || cleaned.length > 100) return;
+            candidates.push(cleaned);
+        });
+    });
+
+    if (candidates.length > 0) {
+        return firstNonEmpty(...candidates);
+    }
+
+    const bodyText = normalizeText($('body').text() || '');
+    const authorMatch = bodyText.match(/(?:tác giả|tac gia)\s*[:\-]\s*([^|,.;\n]+)/i);
+    if (!authorMatch?.[1]) return '';
+
+    return normalizeText(authorMatch[1] || '');
+};
+
+const extractAuthorName = (storyPayload, $) =>
+    withFallback(
+        storyPayload?.author?.name,
+        storyPayload?.author?.full_name,
+        storyPayload?.authorName,
+        storyPayload?.author_name,
+        storyPayload?.author,
+        storyPayload?.writer,
+        $('meta[name="author"]').attr('content'),
+        $('meta[property="book:author"]').attr('content'),
+        $('meta[property="og:novel:author"]').attr('content'),
+        extractAuthorFromDom($)
+    );
 
 const parseLatestBookLinksFromHomepage = ($, sourceUrl, limit = DEFAULT_LIMIT) => {
     const links = [];
@@ -357,16 +410,11 @@ const extractStorySnapshot = async (storyUrl) => {
         throw new Error('Khong lay duoc tieu de truyen tu URL nay.');
     }
 
-    const author = firstNonEmpty(
-        storyPayload?.author?.name,
-        storyPayload?.authorName,
-        storyPayload?.author,
-        $('meta[name="author"]').attr('content'),
-        'Crawler TruyenChuCV'
-    );
+    const author = extractAuthorName(storyPayload, $);
 
-    const description = firstNonEmpty(
+    const description = withFallback(
         storyPayload?.description,
+        storyPayload?.summary,
         $('meta[property="og:description"]').attr('content'),
         ''
     );
@@ -555,6 +603,8 @@ const crawlChapterContents = async (chapterLinks, chapterConcurrency = DEFAULT_C
 const upsertBookLite = async (bookLite) => {
     const titleRegex = new RegExp(`^${escapeRegex(bookLite.title)}$`, 'i');
     const sourceUrl = normalizeText(bookLite.href || '');
+    const normalizedAuthor = withFallback(bookLite.author);
+    const normalizedDescription = withFallback(bookLite.description);
 
     let book = await Book.findOne({
         $or: [
@@ -568,8 +618,8 @@ const upsertBookLite = async (bookLite) => {
     if (!book) {
         book = new Book({
             title: bookLite.title,
-            author: 'Crawler TruyenChuCV',
-            description: '',
+            author: normalizedAuthor,
+            description: normalizedDescription,
             cover_url: bookLite.cover_url || '',
             total_chapters: 0,
             uploader_id: process.env.CRAWLER_UPLOADER_ID || 'system_crawler',
@@ -578,6 +628,18 @@ const upsertBookLite = async (bookLite) => {
         action = 'created';
     } else if (sourceUrl && !book.crawler_source_url) {
         book.crawler_source_url = sourceUrl;
+    }
+
+    if (!normalizeText(book.author) || isFallbackValue(book.author)) {
+        book.author = normalizedAuthor;
+    } else if (!isFallbackValue(bookLite.author)) {
+        book.author = normalizeText(bookLite.author);
+    }
+
+    if (!normalizeText(book.description) || isFallbackValue(book.description)) {
+        book.description = normalizedDescription;
+    } else if (!isFallbackValue(bookLite.description)) {
+        book.description = normalizeText(bookLite.description);
     }
 
     if (bookLite.cover_url) {
@@ -590,6 +652,8 @@ const upsertBookLite = async (bookLite) => {
 
 const upsertBookWithChapters = async (storySnapshot, crawledChapters) => {
     const titleRegex = new RegExp(`^${escapeRegex(storySnapshot.title)}$`, 'i');
+    const normalizedAuthor = withFallback(storySnapshot.author);
+    const normalizedDescription = withFallback(storySnapshot.description);
 
     let book = await Book.findOne({
         $or: [
@@ -604,8 +668,8 @@ const upsertBookWithChapters = async (storySnapshot, crawledChapters) => {
     if (!book) {
         book = new Book({
             title: storySnapshot.title,
-            author: storySnapshot.author || 'Crawler TruyenChuCV',
-            description: storySnapshot.description || '',
+            author: normalizedAuthor,
+            description: normalizedDescription,
             genres: storySnapshot.genres || [],
             cover_url: storySnapshot.cover_url || '',
             total_chapters: 0,
@@ -615,8 +679,17 @@ const upsertBookWithChapters = async (storySnapshot, crawledChapters) => {
         });
     } else {
         book.title = storySnapshot.title || book.title;
-        book.author = storySnapshot.author || book.author;
-        if (storySnapshot.description) book.description = storySnapshot.description;
+        if (!normalizeText(book.author) || isFallbackValue(book.author)) {
+            book.author = normalizedAuthor;
+        } else if (!isFallbackValue(storySnapshot.author)) {
+            book.author = normalizeText(storySnapshot.author);
+        }
+
+        if (!normalizeText(book.description) || isFallbackValue(book.description)) {
+            book.description = normalizedDescription;
+        } else if (!isFallbackValue(storySnapshot.description)) {
+            book.description = normalizeText(storySnapshot.description);
+        }
         if (storySnapshot.cover_url) book.cover_url = storySnapshot.cover_url;
         if (Array.isArray(storySnapshot.genres) && storySnapshot.genres.length > 0) {
             book.genres = Array.from(new Set(storySnapshot.genres.map((item) => normalizeText(item)).filter(Boolean)));
@@ -673,7 +746,23 @@ const upsertBookWithChapters = async (storySnapshot, crawledChapters) => {
     };
 };
 
-// Crawl nhanh: lay title + cover cua danh sach truyen moi nhat.
+const doesBookExistInDatabase = async (bookLink) => {
+    const normalizedHref = normalizeText(bookLink?.href || '');
+    const normalizedTitle = normalizeText(bookLink?.title || '');
+    const titleRegex = normalizedTitle ? new RegExp(`^${escapeRegex(normalizedTitle)}$`, 'i') : null;
+
+    const filters = [
+        normalizedHref ? { crawler_source_url: normalizedHref } : null,
+        titleRegex ? { title: titleRegex } : null
+    ].filter(Boolean);
+
+    if (filters.length === 0) return false;
+
+    const existing = await Book.findOne({ $or: filters }).select('_id').lean();
+    return Boolean(existing);
+};
+
+// Crawl nhanh: lay metadata cua danh sach truyen moi nhat.
 const crawlLatestBooksFromTruyenChuCV = async (limit = DEFAULT_LIMIT, sourceUrl = HOME_URL) => {
     const safeLimit = Number.isFinite(Number(limit))
         ? Math.max(1, Math.min(Number(limit), 200))
@@ -688,24 +777,41 @@ const crawlLatestBooksFromTruyenChuCV = async (limit = DEFAULT_LIMIT, sourceUrl 
         throw new Error('Khong tim thay truyen tu selector card tren homepage.');
     }
 
+    const existenceLimiter = pLimit(DEFAULT_CHAPTER_CONCURRENCY);
+    const checkedLinks = await Promise.all(
+        latestBookLinks.map((item) =>
+            existenceLimiter(async () => ({
+                ...item,
+                exists_in_database: await doesBookExistInDatabase(item)
+            }))
+        )
+    );
+
+    const bookLinksToImport = checkedLinks.filter((item) => !item.exists_in_database);
+    const skippedExistingCount = checkedLinks.length - bookLinksToImport.length;
+
     const detailLimiter = pLimit(DEFAULT_CHAPTER_CONCURRENCY);
 
     const latestBooks = await Promise.all(
-        latestBookLinks.map((item, index) =>
+        bookLinksToImport.map((item, index) =>
             detailLimiter(async () => {
                 try {
                     await sleep((index % DEFAULT_CHAPTER_CONCURRENCY) * DETAIL_FETCH_DELAY_MS);
-                    const cover_url = await extractCoverFromStoryPage(item.href);
+                    const preview = await extractStoryPreviewFromStoryPage(item.href);
                     return {
                         title: item.title,
                         href: item.href,
-                        cover_url
+                        cover_url: preview.cover_url,
+                        author: preview.author,
+                        description: preview.description
                     };
                 } catch (error) {
                     return {
                         title: item.title,
                         href: item.href,
-                        cover_url: ''
+                        cover_url: '',
+                        author: FALLBACK_TEXT,
+                        description: FALLBACK_TEXT
                     };
                 }
             })
@@ -728,31 +834,42 @@ const crawlLatestBooksFromTruyenChuCV = async (limit = DEFAULT_LIMIT, sourceUrl 
     return {
         source: normalizedSourceUrl,
         requested_limit: safeLimit,
+        discovered: latestBookLinks.length,
         crawled: latestBooks.length,
         created: createdCount,
         updated: updatedCount,
+        skipped_existing: skippedExistingCount,
         books: latestBooks
     };
 };
 
-const extractCoverFromStoryPage = async (storyUrl) => {
+const extractStoryPreviewFromStoryPage = async (storyUrl) => {
     const html = await fetchHtml(storyUrl);
     const $ = cheerio.load(html);
-
-    const ogImage = normalizeText($('meta[property="og:image"]').attr('content') || '');
-    if (ogImage) {
-        return resolveCoverUrl(ogImage);
-    }
-
     const nextData = extractNextData($);
     const storyPayload = resolveStoryPayload(nextData);
-    const coverFromNextData = firstNonEmpty(
-        storyPayload?.coverUrl,
-        storyPayload?.cover_url,
-        nextData?.props?.pageProps?.coverUrl
+
+    const cover_url = resolveCoverUrl(
+        firstNonEmpty(
+            $('meta[property="og:image"]').attr('content'),
+            storyPayload?.coverUrl,
+            storyPayload?.cover_url,
+            nextData?.props?.pageProps?.coverUrl
+        )
     );
 
-    return resolveCoverUrl(coverFromNextData);
+    const author = extractAuthorName(storyPayload, $);
+    const description = withFallback(
+        storyPayload?.description,
+        storyPayload?.summary,
+        $('meta[property="og:description"]').attr('content')
+    );
+
+    return {
+        cover_url,
+        author,
+        description
+    };
 };
 
 const crawlStoryWithChapters = async (storyUrl, options = {}) => {
