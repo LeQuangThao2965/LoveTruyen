@@ -17,6 +17,99 @@ const parsePositiveInt = (value, fallback = 0) => {
     return Math.floor(parsed);
 };
 
+const getWeekStart = (value = new Date()) => {
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+
+    const day = date.getDay();
+    const offset = day === 0 ? 6 : day - 1;
+    date.setDate(date.getDate() - offset);
+
+    return date;
+};
+
+const toBookObjectId = (value) => {
+    if (!value) return null;
+
+    if (value instanceof mongoose.Types.ObjectId) return value;
+    if (typeof value === 'string' && mongoose.Types.ObjectId.isValid(value)) {
+        return new mongoose.Types.ObjectId(value);
+    }
+
+    return null;
+};
+
+const resolveBookIdFromChapter = (chapter, fallbackStoryId) => {
+    const chapterBookId =
+        chapter?.book_id
+        ?? chapter?.storyId
+        ?? chapter?._doc?.book_id
+        ?? chapter?._doc?.storyId;
+
+    return toBookObjectId(chapterBookId) || toBookObjectId(fallbackStoryId);
+};
+
+const incrementBookViewStats = async (bookId) => {
+    const safeBookId = toBookObjectId(bookId);
+    if (!safeBookId) return;
+
+    const weekStart = getWeekStart();
+
+    try {
+        await Book.updateOne(
+            { _id: safeBookId },
+            [
+                {
+                    $set: {
+                        __sameWeek: { $eq: ['$weekly_views_start', weekStart] }
+                    }
+                },
+                {
+                    $set: {
+                        total_views: {
+                            $add: [{ $ifNull: ['$total_views', 0] }, 1]
+                        },
+                        weekly_views: {
+                            $cond: [
+                                '$__sameWeek',
+                                { $add: [{ $ifNull: ['$weekly_views', 0] }, 1] },
+                                1
+                            ]
+                        },
+                        weekly_views_start: weekStart
+                    }
+                },
+                { $unset: '__sameWeek' }
+            ]
+        );
+    } catch (pipelineError) {
+        // Fallback for older MongoDB versions that don't support update pipeline.
+        const current = await Book.findById(safeBookId)
+            .select('_id total_views weekly_views weekly_views_start')
+            .lean();
+        if (!current) return;
+
+        const isSameWeek =
+            current.weekly_views_start instanceof Date
+            && current.weekly_views_start.getTime() === weekStart.getTime();
+
+        await Book.updateOne(
+            { _id: safeBookId },
+            {
+                $set: {
+                    weekly_views_start: weekStart,
+                    weekly_views: isSameWeek
+                        ? Number(current.weekly_views || 0) + 1
+                        : 1
+                },
+                $inc: { total_views: 1 }
+            }
+        );
+
+        console.warn('Fallback increment view stats because update pipeline failed:', pipelineError?.message);
+    }
+};
+
 const buildStoryOrFilters = (storyId) => {
     const normalized = typeof storyId === 'string' ? storyId.trim() : '';
     const objectId = toObjectId(normalized);
@@ -183,6 +276,12 @@ exports.getChapterByStoryAndNumber = async (req, res) => {
             });
         }
 
+        try {
+            await incrementBookViewStats(resolveBookIdFromChapter(chapter, storyId));
+        } catch (viewError) {
+            console.error('Loi cap nhat view truyen:', viewError);
+        }
+
         return res.status(200).json({
             success: true,
             data: normalizeChapter(chapter, normalizedChapterNumber)
@@ -205,6 +304,12 @@ exports.getChapterDetail = async (req, res) => {
         const chapter = await Chapter.findById(id);
         if (!chapter) {
             return res.status(404).json({ success: false, message: 'Chuong khong ton tai.' });
+        }
+
+        try {
+            await incrementBookViewStats(resolveBookIdFromChapter(chapter));
+        } catch (viewError) {
+            console.error('Loi cap nhat view truyen:', viewError);
         }
 
         return res.status(200).json({

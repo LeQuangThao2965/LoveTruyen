@@ -73,6 +73,7 @@ const Header = () => {
     const [user, setUser] = useState(null);
     const [userRole, setUserRole] = useState('user'); // State riêng biệt cho Role
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
     
     // State cho Dropdown
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -80,6 +81,8 @@ const Header = () => {
     
     const dropdownRef = useRef(null); 
     const adminDropdownRef = useRef(null);
+    const searchRef = useRef(null);
+    const searchInputRef = useRef(null);
 
     // Xử lý Auth riêng
     useEffect(() => {
@@ -100,12 +103,34 @@ const Header = () => {
             if (adminDropdownRef.current && !adminDropdownRef.current.contains(event.target)) {
                 setIsAdminDropdownOpen(false);
             }
+            if (searchRef.current && !searchRef.current.contains(event.target)) {
+                setIsSearchOpen(false);
+            }
         };
         document.addEventListener("mousedown", handleClickOutside);
 
         return () => {
             subscription.unsubscribe();
             document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (isSearchOpen && searchInputRef.current) {
+            searchInputRef.current.focus();
+        }
+    }, [isSearchOpen]);
+
+    useEffect(() => {
+        const handleEsc = (event) => {
+            if (event.key === 'Escape') {
+                setIsSearchOpen(false);
+            }
+        };
+
+        document.addEventListener('keydown', handleEsc);
+        return () => {
+            document.removeEventListener('keydown', handleEsc);
         };
     }, []);
 
@@ -151,6 +176,10 @@ const Header = () => {
         }
     };
 
+
+    const handleSearchToggle = () => {
+        setIsSearchOpen((prev) => !prev);
+    };
     const getAvatarUrl = (user) => {
         if (!user) return '';
         if (user.user_metadata?.avatar_url) return user.user_metadata.avatar_url;
@@ -183,16 +212,34 @@ const Header = () => {
                     {/* RIGHT GROUP */}
                     <div className="flex items-center gap-3 md:gap-5">
                         
-                        {/* 1. THANH TÌM KIẾM */}
-                        <div className="hidden md:flex items-center bg-gray-100/80 hover:bg-gray-100 rounded-full px-4 py-1.5 transition-all w-48 focus-within:w-64 focus-within:ring-2 focus-within:ring-indigo-100 border border-transparent focus-within:border-indigo-200">
-                            <input 
-                                type="text"     
-                                placeholder="Tìm truyện..." 
-                                className="bg-transparent outline-none flex-1 text-sm text-gray-700 placeholder-gray-400"
-                            />
-                            <div className="cursor-pointer p-1 hover:text-indigo-600 transition">
-                                <Icons.Search />
-                            </div>  
+                        {/* 1. THANH TIM KIEM */}
+                        <div className="hidden md:flex items-center" ref={searchRef}>
+                            <div
+                                className={`flex items-center overflow-hidden rounded-full border bg-gray-100/80 transition-all duration-300 ${
+                                    isSearchOpen
+                                        ? 'w-64 border-indigo-200 px-3 py-1.5 shadow-sm'
+                                        : 'w-10 border-transparent p-0 hover:bg-gray-100'
+                                }`}
+                            >
+                                <input
+                                    ref={searchInputRef}
+                                    type="text"
+                                    placeholder="Tim truyen..."
+                                    className={`bg-transparent text-sm text-gray-700 outline-none placeholder-gray-400 transition-all duration-200 ${
+                                        isSearchOpen
+                                            ? 'mr-2 w-full opacity-100'
+                                            : 'w-0 opacity-0 pointer-events-none'
+                                    }`}
+                                />
+
+                                <button
+                                    type="button"
+                                    onClick={handleSearchToggle}
+                                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition hover:text-indigo-600"
+                                >
+                                    <Icons.Search />
+                                </button>
+                            </div>
                         </div>
 
                         {/* 2. MENU QUẢN TRỊ VIÊN (Chỉ hiện nếu là admin) */}

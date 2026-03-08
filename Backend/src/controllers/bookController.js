@@ -5,6 +5,11 @@ const Book = require('../models/Book');
 
 const MAX_COVER_SIZE_BYTES = 5 * 1024 * 1024;
 const COVER_UPLOAD_DIR = path.resolve(__dirname, '../../../frontend/public/uploaded_covers');
+const DEFAULT_GET_BOOK_LIMIT = 100;
+const MAX_GET_BOOK_LIMIT = 200;
+const DEFAULT_PAGE = 1;
+const DEFAULT_HOT_LIMIT = 10;
+const MAX_HOT_LIMIT = 10;
 const MIME_TO_EXTENSION = {
     'image/jpeg': 'jpg',
     'image/jpg': 'jpg',
@@ -35,69 +40,146 @@ const parseBase64Image = (value = '') => {
     return { mimeType, buffer };
 };
 
+const parsePositiveInt = (value, fallback) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return Math.floor(parsed);
+};
+
+const getWeekStart = (value = new Date()) => {
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+
+    // Monday is the first day of week.
+    const day = date.getDay();
+    const offset = day === 0 ? 6 : day - 1;
+    date.setDate(date.getDate() - offset);
+
+    return date;
+};
+
+const latestChapterLookupStage = {
+    $lookup: {
+        from: 'chapters',
+        let: {
+            bookId: '$_id',
+            bookIdString: { $toString: '$_id' }
+        },
+        pipeline: [
+            {
+                // Ho tro ca 2 schema chapter cu/moi:
+                // - book_id + chapter_number
+                // - storyId + chapterNumber
+                $match: {
+                    $expr: {
+                        $or: [
+                            { $eq: ['$book_id', '$$bookId'] },
+                            { $eq: ['$storyId', '$$bookId'] },
+                            { $eq: ['$storyId', '$$bookIdString'] }
+                        ]
+                    }
+                }
+            },
+            { $sort: { createdAt: -1 } },
+            { $limit: 2 },
+            {
+                $project: {
+                    _id: 1,
+                    createdAt: 1,
+                    chapter_number: {
+                        $ifNull: ['$chapter_number', '$chapterNumber']
+                    }
+                }
+            }
+        ],
+        as: 'latest_chapters'
+    }
+};
+
 // GET /api/books?uploader_id=<id>&status=<status>&limit=12
 // Tra ve danh sach truyen kem 2 chapter moi nhat cho moi truyen.
 exports.getBooks = async (req, res) => {
     try {
-        const { uploader_id, status, limit } = req.query;
+        const { uploader_id, status, limit, page } = req.query;
         const query = {};
 
         if (uploader_id) query.uploader_id = uploader_id;
         if (status) query.status = status;
 
-        const parsedLimit = Number(limit);
-        const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
-            ? Math.min(parsedLimit, 200)
-            : 100;
+        const safeLimit = Math.min(
+            parsePositiveInt(limit, DEFAULT_GET_BOOK_LIMIT),
+            MAX_GET_BOOK_LIMIT
+        );
+        const safePage = parsePositiveInt(page, DEFAULT_PAGE);
+        const skip = (safePage - 1) * safeLimit;
 
-        const books = await Book.aggregate([
-            { $match: query },
-            { $sort: { updatedAt: -1 } },
-            { $limit: safeLimit },
-            {
-                $lookup: {
-                    from: 'chapters',
-                    let: {
-                        bookId: '$_id',
-                        bookIdString: { $toString: '$_id' }
-                    },
-                    pipeline: [
-                        {
-                            // Ho tro ca 2 schema chapter cu/moi:
-                            // - book_id + chapter_number
-                            // - storyId + chapterNumber
-                            $match: {
-                                $expr: {
-                                    $or: [
-                                        { $eq: ['$book_id', '$$bookId'] },
-                                        { $eq: ['$storyId', '$$bookId'] },
-                                        { $eq: ['$storyId', '$$bookIdString'] }
-                                    ]
-                                }
-                            }
-                        },
-                        { $sort: { createdAt: -1 } },
-                        { $limit: 2 },
-                        {
-                            $project: {
-                                _id: 1,
-                                createdAt: 1,
-                                chapter_number: {
-                                    $ifNull: ['$chapter_number', '$chapterNumber']
-                                }
-                            }
-                        }
-                    ],
-                    as: 'latest_chapters'
-                }
-            }
+        const [books, total] = await Promise.all([
+            Book.aggregate([
+                { $match: query },
+                { $sort: { updatedAt: -1 } },
+                { $skip: skip },
+                { $limit: safeLimit },
+                latestChapterLookupStage
+            ]),
+            Book.countDocuments(query)
         ]);
 
-        return res.status(200).json({ books });
+        return res.status(200).json({
+            books,
+            page: safePage,
+            limit: safeLimit,
+            total,
+            totalPages: total > 0 ? Math.ceil(total / safeLimit) : 1
+        });
     } catch (error) {
         console.error('Loi API lay danh sach truyen:', error);
         return res.status(500).json({
             error: 'Khong the lay danh sach truyen. Vui long thu lai.'
+        });
+    }
+};
+
+// GET /api/books/hot-weekly?limit=10
+exports.getHotBooksWeekly = async (req, res) => {
+    try {
+        const safeLimit = Math.min(
+            parsePositiveInt(req.query?.limit, DEFAULT_HOT_LIMIT),
+            MAX_HOT_LIMIT
+        );
+        const weekStart = getWeekStart();
+
+        const books = await Book.aggregate([
+            {
+                $addFields: {
+                    weekly_views_current: {
+                        $cond: [
+                            { $eq: ['$weekly_views_start', weekStart] },
+                            { $ifNull: ['$weekly_views', 0] },
+                            0
+                        ]
+                    },
+                    total_views: { $ifNull: ['$total_views', 0] }
+                }
+            },
+            {
+                $sort: {
+                    weekly_views_current: -1,
+                    total_views: -1,
+                    updatedAt: -1
+                }
+            },
+            { $limit: safeLimit },
+            latestChapterLookupStage
+        ]);
+
+        return res.status(200).json({
+            books,
+            weekStart
+        });
+    } catch (error) {
+        console.error('Loi API lay truyen hot tuan:', error);
+        return res.status(500).json({
+            error: 'Khong the lay danh sach truyen hot tuan. Vui long thu lai.'
         });
     }
 };

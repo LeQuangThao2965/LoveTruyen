@@ -43,9 +43,24 @@ const bookSchema = new mongoose.Schema({
     total_chapters: {
         type: Number,
         default: 0
+    },
+    total_views: {
+        type: Number,
+        default: 0
+    },
+    weekly_views: {
+        type: Number,
+        default: 0
+    },
+    weekly_views_start: {
+        type: Date,
+        default: null
     }
 }, {
     timestamps: true
 });
+
+bookSchema.index({ updatedAt: -1 });
+bookSchema.index({ weekly_views_start: -1, weekly_views: -1, total_views: -1 });
 
 module.exports = mongoose.model('Book', bookSchema);
