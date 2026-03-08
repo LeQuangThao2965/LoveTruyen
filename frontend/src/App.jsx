@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+﻿import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -31,7 +31,7 @@ const AppLayout = () => {
           <Route
             path="/profile"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['user', 'host', 'admin']}>
                 <UserProfile />
               </ProtectedRoute>
             }
@@ -39,6 +39,15 @@ const AppLayout = () => {
 
           <Route
             path="/host/my-books"
+            element={
+              <ProtectedRoute allowedRoles={['host', 'admin']}>
+                <ManageBooks />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/host/*"
             element={
               <ProtectedRoute allowedRoles={['host', 'admin']}>
                 <ManageBooks />

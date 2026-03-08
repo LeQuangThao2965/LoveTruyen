@@ -167,9 +167,9 @@ const BookDetail = () => {
 
             <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
-                    <h2 className="text-lg font-bold text-gray-800">Danh sach chuong</h2>
+                    <h2 className="text-lg font-bold text-gray-800">Danh sách chương</h2>
                     <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-700">
-                        Toi da {CHAPTERS_PER_PAGE} chuong/trang
+                        Tối đa {CHAPTERS_PER_PAGE} chương/trang
                     </span>
                 </div>
 
@@ -183,17 +183,17 @@ const BookDetail = () => {
                             <table className="w-full border-collapse text-left">
                                 <thead>
                                     <tr className="border-b border-gray-100 bg-gray-50 text-xs uppercase tracking-wider text-gray-600">
-                                        <th className="px-4 py-3">So chuong</th>
-                                        <th className="px-4 py-3">Tieu de</th>
-                                        <th className="px-4 py-3">Cap nhat</th>
-                                        <th className="px-4 py-3 text-right">Doc</th>
+                                        <th className="px-4 py-3">Chương</th>
+                                        <th className="px-4 py-3">Tiêu đề</th>
+                                        <th className="px-4 py-3">Ngày</th>
+                                        <th className="px-4 py-3 text-right">READNOW</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
                                     {chapters.map((chapter) => (
                                         <tr key={chapter._id} className="transition hover:bg-gray-50">
                                             <td className="px-4 py-3 text-sm font-bold text-indigo-700">
-                                                Chuong {chapter.chapter_number}
+                                                Ch.{chapter.chapter_number}
                                             </td>
                                             <td className="px-4 py-3 text-sm text-gray-800">{chapter.title}</td>
                                             <td className="px-4 py-3 text-xs text-gray-500">
@@ -204,7 +204,7 @@ const BookDetail = () => {
                                                     to={`/truyen/${bookId}/chuong/${chapter.chapter_number}`}
                                                     className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700"
                                                 >
-                                                    Doc ngay
+                                                    Đọc
                                                 </Link>
                                             </td>
                                         </tr>

@@ -261,7 +261,7 @@ const Header = () => {
                                             <Icons.Users /> Quản lý user
                                         </Link>
                                         <Link to="/admin/reports" onClick={() => setIsAdminDropdownOpen(false)} className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition">
-                                            <Icons.Report /> Xem báo cáo
+                                            <Icons.Report /> Báo cáo từ Users
                                         </Link>
                                         <Link to="/admin/crawler" onClick={() => setIsAdminDropdownOpen(false)} className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition">
                                             <Icons.Crawl /> Crawl truyện

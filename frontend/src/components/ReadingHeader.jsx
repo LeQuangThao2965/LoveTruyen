@@ -101,7 +101,7 @@ const ReadingHeader = ({
                     to="/"
                     className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-extrabold tracking-wide text-white transition hover:bg-indigo-700"
                 >
-                    LT
+                    HOME
                 </Link>
 
                 <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
@@ -111,7 +111,7 @@ const ReadingHeader = ({
                         onClick={onGoPrev}
                         className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {'<-'}
+                        {'←'} {/*mũi tên hướng sang trái*/}
                     </button>
 
                     <select
@@ -132,7 +132,7 @@ const ReadingHeader = ({
                         onClick={onGoNext}
                         className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {'->'}
+                        {'→'} {/*mũi tên hướng sang phải*/}
                     </button>
                 </div>
 
@@ -181,7 +181,7 @@ const ReadingHeader = ({
                                                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                             }`}
                                         >
-                                            Nen sang
+                                            Sáng 🌞
                                         </button>
                                         <button
                                             type="button"
@@ -192,7 +192,7 @@ const ReadingHeader = ({
                                                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                             }`}
                                         >
-                                            Nen toi
+                                            Tối 🌒
                                         </button>
                                     </div>
 
