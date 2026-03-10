@@ -428,7 +428,7 @@ const CrawlBooks = () => {
                                 <table className="w-full border-collapse text-left">
                                     <thead>
                                         <tr className="border-b border-gray-200 bg-gray-50 text-sm uppercase tracking-wider text-gray-600">
-                                            <th className="px-4 py-3">Anh</th>
+                                            <th className="px-4 py-3">Bìa truyện</th>
                                             <th className="px-4 py-3">Ten truyen</th>
                                             <th className="px-4 py-3">Tac gia</th>
                                             <th className="px-4 py-3">Nguon</th>
