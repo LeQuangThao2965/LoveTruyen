@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../../services/axiosConfig';
 import HomeBookCard from '../../components/HomeBookCard';
@@ -47,7 +47,7 @@ const SearchAdvanced = () => {
     }, [genreSearchQuery]);
 
     // Fetch search results
-    const fetchSearchResults = async (page = 1) => {
+    const fetchSearchResults = useCallback(async (page = 1) => {
         setLoading(true);
         setError('');
         
@@ -77,7 +77,7 @@ const SearchAdvanced = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [filters, setLoading, setError, setBooks, setPagination, setSearchParams]);
 
     // Handle filter changes
     const handleFilterChange = (field, value) => {
@@ -128,12 +128,13 @@ const SearchAdvanced = () => {
         const hasActiveFilters = filters.title.trim() || 
                                filters.genres.length > 0 || 
                                filters.year_start || 
-                               filters.year_end;
-        
+                               filters.year_end ||
+                               filters.sort_by !== 'relevance' ||
+                               filters.sort_order !== 'desc';
         if (hasActiveFilters) {
             fetchSearchResults(1);
         }
-    }, []); // Only run on mount
+    }, [fetchSearchResults, filters.title, filters.genres.length, filters.year_start, filters.year_end, filters.sort_by, filters.sort_order]);
 
     return (
         <div className="container mx-auto px-4 py-6">
