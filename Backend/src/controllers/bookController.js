@@ -3,21 +3,6 @@ const path = require('path');
 const mongoose = require('mongoose');
 const Book = require('../models/Book');
 
-// Helper function to remove Vietnamese diacritics
-function removeDiacritics(str) {
-    return str
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[đĐ]/g, (match) => match === 'đ' ? 'd' : 'D');
-}
-
-// Helper function to parse positive integer
-const parsePositiveInt = (value, fallback) => {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-    return Math.floor(parsed);
-};
-
 const MAX_COVER_SIZE_BYTES = 5 * 1024 * 1024;
 const COVER_UPLOAD_DIR = path.resolve(__dirname, '../../../frontend/public/uploaded_covers');
 const DEFAULT_GET_BOOK_LIMIT = 100;
@@ -53,6 +38,12 @@ const parseBase64Image = (value = '') => {
     if (!buffer.length) return null;
 
     return { mimeType, buffer };
+};
+
+const parsePositiveInt = (value, fallback) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return Math.floor(parsed);
 };
 
 const getWeekStart = (value = new Date()) => {
@@ -389,20 +380,6 @@ exports.getBooksAdvancedSearch = async (req, res) => {
         // Build match conditions
         const matchConditions = {};
 
-        // Title search (case-insensitive, Vietnamese diacritics aware)
-        if (title && typeof title === 'string' && title.trim()) {
-            const searchTitle = title.trim();
-            const searchTitleNoDiacritics = removeDiacritics(searchTitle);
-            
-            // Search in both title and title_no_diacritics fields
-            matchConditions.$or = [
-                { title: { $regex: searchTitle, $options: 'i' } },
-                { title_no_diacritics: { $regex: searchTitle, $options: 'i' } },
-                { title: { $regex: searchTitleNoDiacritics, $options: 'i' } },
-                { title_no_diacritics: { $regex: searchTitleNoDiacritics, $options: 'i' } }
-            ];
-        }
-
         // Genres filter (AND condition - phải có tất cả genres được chọn)
         if (genres && typeof genres === 'string') {
             const genresArray = genres.split(',').map(g => g.trim()).filter(g => g);
@@ -431,10 +408,30 @@ exports.getBooksAdvancedSearch = async (req, res) => {
 
         // Add relevance scoring for title search
         let relevanceStage = {};
-        // Tạm thời bỏ relevance scoring để fix 500 error
-        // TODO: Implement proper relevance scoring sau
-        /*
+        let titleMatchConditions = {};
+        
         if (title && typeof title === 'string' && title.trim()) {
+            const searchTerm = title.trim();
+            
+            // Tạo search term không dấu
+            const removeDiacritics = (str) => {
+                return str.normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .replace(/[đĐ]/g, d => d === 'đ' ? 'd' : 'D');
+            };
+            
+            const searchTermNoDiacritics = removeDiacritics(searchTerm);
+            
+            // Tạo điều kiện tìm kiếm: có dấu HOẶC không dấu
+            titleMatchConditions = {
+                $or: [
+                    { title: { $regex: searchTerm, $options: 'i' } }, // Tìm kiếm có dấu
+                    { title: { $regex: searchTermNoDiacritics, $options: 'i' } } // Tìm kiếm không dấu
+                ]
+            };
+            
+            // TODO: Implement proper relevance scoring sau
+            /*
             relevanceStage = {
                 $addFields: {
                     relevanceScore: {
@@ -449,8 +446,8 @@ exports.getBooksAdvancedSearch = async (req, res) => {
                     }
                 }
             };
+            */
         }
-        */
 
         // Build sort options
         let sortOptions = {};
@@ -506,6 +503,11 @@ exports.getBooksAdvancedSearch = async (req, res) => {
         const aggregationPipeline = [
             { $match: matchConditions }
         ];
+
+        // Add title search conditions if searching by title
+        if (Object.keys(titleMatchConditions).length > 0) {
+            aggregationPipeline.push({ $match: titleMatchConditions });
+        }
 
         // Add relevance stage if searching by title
         if (Object.keys(relevanceStage).length > 0) {
