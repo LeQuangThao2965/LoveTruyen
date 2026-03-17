@@ -451,17 +451,7 @@ exports.getBooksAdvancedSearch = async (req, res) => {
                     break;
                 case 'status':
                     // Sắp xếp theo trạng thái: Hoàn thành > Đang cập nhật > Tạm dừng
-                    sortOptions = { 
-                        $switch: {
-                            'Hoàn thành': 1,
-                            'Đang cập nhật': 2,
-                            'Tạm dừng': 3,
-                            'completed': 1,
-                            'on-going': 2,
-                            'dropped': 3,
-                            default: 99
-                        }
-                    };
+                    sortOptions = { statusPriority: sort_order === 'desc' ? -1 : 1 };
                     break;
                 default:
                     sortOptions = { updated_at: -1, total_views: -1 };
@@ -475,6 +465,25 @@ exports.getBooksAdvancedSearch = async (req, res) => {
         const aggregationPipeline = [
             { $match: matchConditions }
         ];
+
+        // Add status priority stage if sorting by status
+        if (sort_by === 'status') {
+            aggregationPipeline.push({
+                $addFields: {
+                    statusPriority: {
+                        $cond: [
+                            { $in: ['$status', ['Hoàn thành', 'completed']] },
+                            1,
+                            { $cond: [
+                                { $in: ['$status', ['Đang cập nhật', 'on-going']] },
+                                2,
+                                3
+                            ]}
+                        ]
+                    }
+                }
+            });
+        }
 
         // Add relevance stage if searching by title
         if (Object.keys(relevanceStage).length > 0) {
