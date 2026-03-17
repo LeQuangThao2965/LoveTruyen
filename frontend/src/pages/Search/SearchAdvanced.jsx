@@ -50,6 +50,9 @@ const SearchAdvanced = () => {
 
     // Fetch search results
     const fetchSearchResults = useCallback(async (page = 1) => {
+        console.log('fetchSearchResults called with page:', page);
+        console.log('Current filters:', filters);
+        
         setLoading(true);
         setError('');
         
@@ -80,7 +83,7 @@ const SearchAdvanced = () => {
         } finally {
             setLoading(false);
         }
-    }, [filters.title, filters.genres, filters.year_start, filters.year_end, filters.status, filters.sort_by, filters.sort_order, setSearchParams]);
+    }, [filters, setSearchParams]);
 
     // Handle filter changes
     const handleFilterChange = (field, value) => {
@@ -124,8 +127,13 @@ const SearchAdvanced = () => {
 
     // Handle pagination
     const handlePageChange = (newPage) => {
+        console.log('handlePageChange called with:', newPage);
+        console.log('Current pagination:', pagination);
         if (newPage >= 1 && newPage <= pagination.totalPages) {
+            console.log('Calling fetchSearchResults with page:', newPage);
             fetchSearchResults(newPage);
+        } else {
+            console.log('Invalid page number:', newPage);
         }
     };
 
