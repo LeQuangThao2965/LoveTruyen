@@ -129,12 +129,11 @@ const SearchAdvanced = () => {
         }
     };
 
-    // Initial load
+    // Initial load và filter changes
     useEffect(() => {
-        // Chỉ load lần đầu khi vào page
+        // Load khi vào page hoặc khi filters thay đổi
         fetchSearchResults(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [filters.title, filters.genres, filters.year_start, filters.year_end, filters.status, filters.sort_by, filters.sort_order]);
 
     return (
         <div className="container mx-auto px-4 py-6">
