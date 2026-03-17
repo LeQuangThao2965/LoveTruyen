@@ -394,23 +394,60 @@ const SearchAdvanced = () => {
                                     </button>
                                     
                                     <div className="flex space-x-1">
-                                        {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                                            const pageNum = i + 1;
-                                            const isActive = pageNum === pagination.current;
-                                            return (
-                                                <button
-                                                    key={pageNum}
-                                                    onClick={() => handlePageChange(pageNum)}
-                                                    className={`px-3 py-1 rounded-md ${
-                                                        isActive 
-                                                            ? 'bg-indigo-600 text-white' 
-                                                            : 'border border-gray-300 hover:bg-gray-50'
-                                                    }`}
-                                                >
-                                                    {pageNum}
-                                                </button>
-                                            );
-                                        })}
+                                        {(() => {
+                                            const pages = [];
+                                            const totalPages = pagination.totalPages;
+                                            const currentPage = pagination.current;
+                                            
+                                            // Always show first page
+                                            if (currentPage > 3) {
+                                                pages.push(1);
+                                                if (currentPage > 4) {
+                                                    pages.push('...');
+                                                }
+                                            }
+                                            
+                                            // Show pages around current
+                                            const start = Math.max(1, currentPage - 2);
+                                            const end = Math.min(totalPages, currentPage + 2);
+                                            
+                                            for (let i = start; i <= end; i++) {
+                                                pages.push(i);
+                                            }
+                                            
+                                            // Always show last page
+                                            if (currentPage < totalPages - 2) {
+                                                if (currentPage < totalPages - 3) {
+                                                    pages.push('...');
+                                                }
+                                                pages.push(totalPages);
+                                            }
+                                            
+                                            return pages.map((pageNum, index) => {
+                                                if (pageNum === '...') {
+                                                    return (
+                                                        <span key={`ellipsis-${index}`} className="px-3 py-1 text-gray-500">
+                                                            ...
+                                                        </span>
+                                                    );
+                                                }
+                                                
+                                                const isActive = pageNum === currentPage;
+                                                return (
+                                                    <button
+                                                        key={pageNum}
+                                                        onClick={() => handlePageChange(pageNum)}
+                                                        className={`px-3 py-1 rounded-md ${
+                                                            isActive 
+                                                                ? 'bg-indigo-600 text-white' 
+                                                                : 'border border-gray-300 hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        {pageNum}
+                                                    </button>
+                                                );
+                                            });
+                                        })()}
                                     </div>
                                     
                                     <button
