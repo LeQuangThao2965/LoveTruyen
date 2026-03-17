@@ -140,6 +140,126 @@ exports.getBooks = async (req, res) => {
 };
 
 // GET /api/books/hot-weekly?limit=10
+// Tìm kiếm truyện nâng cao
+exports.searchBooks = async (req, res) => {
+    try {
+        const {
+            q: query,
+            genre,
+            status,
+            sort = 'updatedAt',
+            page = 1,
+            limit = 12
+        } = req.query;
+
+        // Build match stage
+        const matchStage = {};
+
+        // Text search
+        if (query && query.trim()) {
+            matchStage.$text = {
+                $search: query.trim(),
+                $caseSensitive: false,
+                $diacriticSensitive: false
+            };
+        }
+
+        // Genre filter
+        if (genre && genre.trim()) {
+            matchStage.genres = {
+                $in: [genre.trim()]
+            };
+        }
+
+        // Status filter
+        if (status && status.trim()) {
+            matchStage.status = status.trim();
+        }
+
+        // Sort options
+        let sortStage = {};
+        switch (sort) {
+            case 'total_views':
+                sortStage = { total_views: -1, updatedAt: -1 };
+                break;
+            case 'title':
+                sortStage = { title: 1, updatedAt: -1 };
+                break;
+            case 'createdAt':
+                sortStage = { createdAt: -1 };
+                break;
+            case 'updatedAt':
+            default:
+                sortStage = { updatedAt: -1 };
+                break;
+        }
+
+        const safePage = Math.max(1, Number(page) || 1);
+        const safeLimit = Math.min(50, Math.max(1, Number(limit) || 12));
+        const skip = (safePage - 1) * safeLimit;
+
+        const [books, total] = await Promise.all([
+            Book.aggregate([
+                { $match: matchStage },
+                { $sort: sortStage },
+                { $skip: skip },
+                { $limit: safeLimit },
+                {
+                    $lookup: {
+                        from: 'chapters',
+                        localField: '_id',
+                        foreignField: 'book_id',
+                        as: 'latest_chapters',
+                        pipeline: [
+                            { $sort: { chapter_number: -1 } },
+                            { $limit: 2 }
+                        ]
+                    }
+                },
+                {
+                    $project: {
+                        title: 1,
+                        author: 1,
+                        description: 1,
+                        cover_url: 1,
+                        genres: 1,
+                        status: 1,
+                        total_chapters: 1,
+                        total_views: 1,
+                        weekly_views_current: 1,
+                        weekly_views_start: 1,
+                        latest_chapters: 1,
+                        createdAt: 1,
+                        updatedAt: 1,
+                        // Add text search score if searching
+                        ...(query && { score: { $meta: 'textScore' } })
+                    }
+                }
+            ]),
+            Book.countDocuments(matchStage)
+        ]);
+
+        const totalPages = Math.ceil(total / safeLimit);
+
+        res.json({
+            books,
+            total,
+            page: safePage,
+            limit: safeLimit,
+            totalPages,
+            hasNextPage: safePage < totalPages,
+            hasPrevPage: safePage > 1
+        });
+
+    } catch (error) {
+        console.error('Lỗi tìm kiếm sách:', error);
+        res.status(500).json({
+            error: 'Lỗi server khi tìm kiếm sách',
+            message: error.message
+        });
+    }
+};
+
 exports.getHotBooksWeekly = async (req, res) => {
     try {
         const safeLimit = Math.min(

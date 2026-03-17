@@ -74,6 +74,8 @@ const Header = () => {
     const [userRole, setUserRole] = useState('user'); // State riêng biệt cho Role
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const searchInputRef = useRef(null);
     
     // State cho Dropdown
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -82,7 +84,6 @@ const Header = () => {
     const dropdownRef = useRef(null); 
     const adminDropdownRef = useRef(null);
     const searchRef = useRef(null);
-    const searchInputRef = useRef(null);
 
     // Xử lý Auth riêng
     useEffect(() => {
@@ -179,7 +180,28 @@ const Header = () => {
 
     const handleSearchToggle = () => {
         setIsSearchOpen((prev) => !prev);
+        // Focus vào input khi mở
+        if (!isSearchOpen) {
+            setTimeout(() => {
+                searchInputRef.current?.focus();
+            }, 100);
+        }
     };
+
+    const handleSearchSubmit = (e) => {
+        e.preventDefault();
+        if (searchQuery.trim()) {
+            navigate(`/search-advanced?q=${encodeURIComponent(searchQuery.trim())}`);
+            setIsSearchOpen(false);
+        }
+    };
+
+    const handleSearchKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            handleSearchSubmit(e);
+        }
+    };
+
     const getAvatarUrl = (user) => {
         if (!user) return '';
         if (user.user_metadata?.avatar_url) return user.user_metadata.avatar_url;
@@ -224,6 +246,9 @@ const Header = () => {
                                 <input
                                     ref={searchInputRef}
                                     type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onKeyDown={handleSearchKeyDown}
                                     placeholder="Tim truyen..."
                                     className={`bg-transparent text-sm text-gray-700 outline-none placeholder-gray-400 transition-all duration-200 ${
                                         isSearchOpen
@@ -234,7 +259,7 @@ const Header = () => {
 
                                 <button
                                     type="button"
-                                    onClick={handleSearchToggle}
+                                    onClick={isSearchOpen ? handleSearchSubmit : handleSearchToggle}
                                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition hover:text-indigo-600"
                                 >
                                     <Icons.Search />

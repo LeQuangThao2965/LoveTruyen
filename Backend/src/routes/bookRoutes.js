@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
     getBooks,
+    searchBooks,
     getHotBooksWeekly,
     getBookById,
     createBook,
@@ -10,6 +11,9 @@ const {
 
 // Danh sach truyen (co kem 2 chapter moi nhat cho moi truyen)
 router.get('/', getBooks);
+
+// Tìm kiếm truyện nâng cao
+router.get('/search', searchBooks);
 
 // Top truyện hot trong tuần (tối đa 10)
 router.get('/hot-weekly', getHotBooksWeekly);
