@@ -418,7 +418,10 @@ exports.getBooksAdvancedSearch = async (req, res) => {
                 $addFields: {
                     relevanceScore: {
                         $cond: [
-                            { $regexMatch: { input: { $toLower: '$title' }, regex: title.trim().toLowerCase() } }
+                            { $gte: [
+                                { $indexOfCP: [{ $toLower: '$title' }, title.trim().toLowerCase()] },
+                                0
+                            ] }
                         ],
                         then: 10,
                         else: 0
