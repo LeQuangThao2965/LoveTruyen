@@ -387,11 +387,11 @@ const Header = () => {
                                                         }`}
                                                     >
                                                         <img
-                                                            src={book.cover_url || 'https://via.placeholder.com/40x56?text=No+Cover'}
+                                                            src={book.cover_url || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNTYiIHZpZXdCb3g9IjAgMCA0MCA1NiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjU2IiBmaWxsPSIjZTVlN2ViIi8+CjxwYXRoIGQ9Ik0xNiAyMUgyNFYyM0gxNlYyMVoiIGZpbGw9IiM2YjcyODAiLz4KPHBhdGggZD0iTTEzIDMySDI3VjM0SDEzVjMyWiIgZmlsbD0iIzZiNzI4MCIvPgo8dGV4dCB4PSIyMCIgeT0iNDQiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI4IiBmaWxsPSIjNmI3MjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5ObyBDPC90ZXh0Pgo8L3N2Zz4='}
                                                             alt={book.title}
                                                             className="w-10 h-14 object-cover rounded mr-3 shrink-0"
                                                             onError={(e) => {
-                                                                e.target.src = 'https://via.placeholder.com/40x56?text=No+Cover';
+                                                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNTYiIHZpZXdCb3g9IjAgMCA0MCA1NiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjU2IiBmaWxsPSIjZTVlN2ViIi8+CjxwYXRoIGQ9Ik0xNiAyMUgyNFYyM0gxNlYyMVoiIGZpbGw9IiM2YjcyODAiLz4KPHBhdGggZD0iTTEzIDMySDI3VjM0SDEzVjMyWiIgZmlsbD0iIzZiNzI4MCIvPgo8dGV4dCB4PSIyMCIgeT0iNDQiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI4IiBmaWxsPSIjNmI3MjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5ObyBDPC90ZXh0Pgo8L3N2Zz4=';
                                                             }}
                                                         />
                                                         <div className="flex-1 min-w-0">
