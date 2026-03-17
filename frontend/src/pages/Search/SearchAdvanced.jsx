@@ -9,7 +9,14 @@ const POPULAR_GENRES = [
     'Dã Sử', 'Khoa Huyễn', 'Kinh Dị', 'Hài Hước', 'Truyện Ma',
     'Trinh Thám', 'Tiểu Thuyết', 'Lịch Sử', 'Võng Du', 'Dị Giới',
     'Hệ Thống', 'Hậu Cung', 'Cổ Trang', 'Ngược', 'Sủng',
-    'HE', 'SE', 'BL', 'GL', 'Hướng nội'
+    'HE', 'SE', 'BL', 'GL', 'Hướng nội',
+    'Xuyên Nhi', 'Dị Năng', 'Sủng Thê', 'Ngọt Văn', 'Cung Đấu',
+    'Huyền Ảo', 'Kiếm Tiên', 'Đại Chiến', 'Hài Hước', 'Lãng Mạn',
+    'Thiếu Nhi', 'Diễn Nghệ', 'Cung Tử', 'Bách Hợp', 'Trọng Sinh',
+    'Quân Sự', 'Hành Động', 'Khoa Học Viễn Tưởng', 'Thể Thao', 'Đấu Phá',
+    'Mạt Thế', 'Dân Tộc', 'Gia Đình', 'Giáo Dục', 'Kinh Tế',
+    'Chính Trị', 'Pháp Luật', 'Tâm Lý', 'Xã Hội', 'Văn Hóa',
+    'Kỹ Thuật', 'Y Học', 'Thần Thoại', 'Bí Ẩn', 'Linh Tinh'
 ];
 
 const SearchAdvanced = () => {
