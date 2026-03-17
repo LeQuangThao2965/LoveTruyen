@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../services/axiosConfig';
-import HomeBookCard from '../Home/HomeBookCard';
+import HomeBookCard from '../../components/HomeBookCard';
 
 const Search = () => {
     const [searchParams] = useSearchParams();

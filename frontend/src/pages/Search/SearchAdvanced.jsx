@@ -1,8 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
 import api from '../../services/axiosConfig';
-import HomeBookCard from '../Home/HomeBookCard';
+import HomeBookCard from '../../components/HomeBookCard';
 
 // Danh sách thể loại phổ biến
 const POPULAR_GENRES = [

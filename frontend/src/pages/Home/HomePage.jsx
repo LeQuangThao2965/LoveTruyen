@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/axiosConfig';
+import SharedHomeBookCard from '../../components/HomeBookCard';
 
 const PLACEHOLDER_COVER = 'https://placehold.co/320x420/e5e7eb/6b7280?text=No+Cover';
 const HOT_BOOK_LIMIT = 10;
