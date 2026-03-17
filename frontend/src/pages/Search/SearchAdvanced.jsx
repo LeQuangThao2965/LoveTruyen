@@ -21,6 +21,7 @@ const SearchAdvanced = () => {
         genres: searchParams.get('genres')?.split(',') || [],
         year_start: searchParams.get('year_start') || '',
         year_end: searchParams.get('year_end') || '',
+        status: searchParams.get('status') || '',
         sort_by: searchParams.get('sort_by') || 'relevance',
         sort_order: searchParams.get('sort_order') || 'desc'
     });
@@ -58,6 +59,7 @@ const SearchAdvanced = () => {
             if (filters.genres.length > 0) params.append('genres', filters.genres.join(','));
             if (filters.year_start) params.append('year_start', filters.year_start);
             if (filters.year_end) params.append('year_end', filters.year_end);
+            if (filters.status) params.append('status', filters.status);
             if (filters.sort_by) params.append('sort_by', filters.sort_by);
             if (filters.sort_order) params.append('sort_order', filters.sort_order);
             params.append('page', page.toString());
@@ -109,7 +111,10 @@ const SearchAdvanced = () => {
             title: '',
             genres: [],
             year_start: '',
-            year_end: ''
+            year_end: '',
+            status: '',
+            sort_by: 'relevance',
+            sort_order: 'desc'
         });
         setGenreSearchQuery('');
         setBooks([]);
@@ -160,7 +165,6 @@ const SearchAdvanced = () => {
                                     <option value="total_views">Lượt đọc</option>
                                     <option value="total_chapters">Số chương</option>
                                     <option value="rating">Đánh giá</option>
-                                    <option value="status">Trạng thái</option>
                                 </select>
                                 <select
                                     value={filters.sort_order}
@@ -237,6 +241,30 @@ const SearchAdvanced = () => {
                                     </div>
                                 </div>
                             )}
+                        </div>
+
+                        {/* Status Filter */}
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Trạng thái
+                            </label>
+                            <div className="space-y-2">
+                                {['', 'Đang cập nhật', 'Hoàn thành', 'Tạm dừng', 'Hết'].map(status => (
+                                    <label key={status || 'all'} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                        <input
+                                            type="radio"
+                                            name="status"
+                                            value={status}
+                                            checked={filters.status === status}
+                                            onChange={(e) => handleFilterChange('status', e.target.value)}
+                                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <span className="text-sm text-gray-700">
+                                            {status || 'Tất cả'}
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
                         </div>
 
                         {/* Year Range */}

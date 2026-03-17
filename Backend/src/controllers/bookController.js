@@ -366,6 +366,7 @@ exports.getBooksAdvancedSearch = async (req, res) => {
             genres,
             year_start,
             year_end,
+            status,
             sort_by = 'relevance',
             sort_order = 'desc',
             page = 1,
@@ -403,6 +404,11 @@ exports.getBooksAdvancedSearch = async (req, res) => {
                 const endYear = parsePositiveInt(year_end, new Date().getFullYear());
                 matchConditions.createdAt.$lte = new Date(`${endYear}-12-31T23:59:59.999Z`);
             }
+        }
+
+        // Status filter
+        if (status && typeof status === 'string' && status.trim()) {
+            matchConditions.status = status.trim();
         }
 
         // Add relevance scoring for title search
@@ -540,6 +546,7 @@ exports.getBooksAdvancedSearch = async (req, res) => {
                 genres: genres || '',
                 year_start: year_start || '',
                 year_end: year_end || '',
+                status: status || '',
                 sort_by: sort_by || 'relevance',
                 sort_order: sort_order || 'desc'
             }

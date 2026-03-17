@@ -37,7 +37,7 @@ const bookSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Đang cập nhật', 'Hoàn thành', 'Tạm dừng', 'completed', 'on-going', 'dropped'],
+        enum: ['Đang cập nhật', 'Hoàn thành', 'Tạm dừng', 'Hết', 'completed', 'on-going', 'dropped'],
         default: 'Đang cập nhật'
     },
     total_chapters: {
