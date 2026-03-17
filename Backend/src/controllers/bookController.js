@@ -449,6 +449,20 @@ exports.getBooksAdvancedSearch = async (req, res) => {
                 case 'rating':
                     sortOptions = { rating: sort_order === 'desc' ? -1 : 1 };
                     break;
+                case 'status':
+                    // Sắp xếp theo trạng thái: Hoàn thành > Đang cập nhật > Tạm dừng
+                    sortOptions = { 
+                        $switch: {
+                            'Hoàn thành': 1,
+                            'Đang cập nhật': 2,
+                            'Tạm dừng': 3,
+                            'completed': 1,
+                            'on-going': 2,
+                            'dropped': 3,
+                            default: 99
+                        }
+                    };
+                    break;
                 default:
                     sortOptions = { updated_at: -1, total_views: -1 };
             }

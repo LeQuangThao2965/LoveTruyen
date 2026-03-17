@@ -165,6 +165,7 @@ const SearchAdvanced = () => {
                                     <option value="total_views">Lượt đọc</option>
                                     <option value="total_chapters">Số chương</option>
                                     <option value="rating">Đánh giá</option>
+                                    <option value="status">Trạng thái</option>
                                 </select>
                                 <select
                                     value={filters.sort_order}
