@@ -40,10 +40,6 @@ const bookSchema = new mongoose.Schema({
         enum: ['Đang cập nhật', 'Hoàn thành', 'Tạm dừng', 'completed', 'on-going', 'dropped'],
         default: 'Đang cập nhật'
     },
-    statusPriority: {
-        type: Number,
-        default: 2 // Đang cập nhật = 2
-    },
     total_chapters: {
         type: Number,
         default: 0

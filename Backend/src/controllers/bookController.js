@@ -386,9 +386,7 @@ exports.getBooksAdvancedSearch = async (req, res) => {
 
         // Genres filter (AND condition - phải có tất cả genres được chọn)
         if (genres && typeof genres === 'string') {
-            // Decode URL encoded genres và split
-            const decodedGenres = decodeURIComponent(genres);
-            const genresArray = decodedGenres.split(',').map(g => g.trim()).filter(g => g);
+            const genresArray = genres.split(',').map(g => g.trim()).filter(g => g);
             if (genresArray.length > 0) {
                 matchConditions.genres = { $all: genresArray };
             }
@@ -414,7 +412,7 @@ exports.getBooksAdvancedSearch = async (req, res) => {
                 $addFields: {
                     relevanceScore: {
                         $cond: [
-                            { $regex: title.trim(), $options: 'i' }
+                            { $regexMatch: { input: { $toLower: '$title' }, regex: title.trim().toLowerCase() } }
                         ],
                         then: 10,
                         else: 0
@@ -428,8 +426,11 @@ exports.getBooksAdvancedSearch = async (req, res) => {
         if (sort_by) {
             switch (sort_by) {
                 case 'relevance':
-                    // Mặc định: relevance score + updated_at
-                    sortOptions = { relevanceScore: -1, updated_at: -1 };
+                    // Mặc định: relevance score (nếu có title search) + updated_at
+                    sortOptions = { 
+                        total_views: -1, // Phụ cho relevance
+                        updated_at: -1
+                    };
                     break;
                 case 'updated_at':
                     sortOptions = { updated_at: sort_order === 'desc' ? -1 : 1 };
@@ -448,7 +449,19 @@ exports.getBooksAdvancedSearch = async (req, res) => {
                     break;
                 case 'status':
                     // Sắp xếp theo trạng thái: Hoàn thành > Đang cập nhật > Tạm dừng
-                    sortOptions = { statusPriority: sort_order === 'desc' ? -1 : 1 };
+                    sortOptions = { 
+                        $switch: {
+                            branches: [
+                                { case: { $eq: ['$status', 'Hoàn thành'] }, then: 1 },
+                                { case: { $eq: ['$status', 'completed'] }, then: 1 },
+                                { case: { $eq: ['$status', 'Đang cập nhật'] }, then: 2 },
+                                { case: { $eq: ['$status', 'on-going'] }, then: 2 },
+                                { case: { $eq: ['$status', 'Tạm dừng'] }, then: 3 },
+                                { case: { $eq: ['$status', 'dropped'] }, then: 3 }
+                            ],
+                            default: 99
+                        }
+                    };
                     break;
                 default:
                     sortOptions = { updated_at: -1, total_views: -1 };
@@ -463,25 +476,6 @@ exports.getBooksAdvancedSearch = async (req, res) => {
             { $match: matchConditions }
         ];
 
-        // Add status priority stage if sorting by status
-        if (sort_by === 'status') {
-            aggregationPipeline.push({
-                $addFields: {
-                    statusPriority: {
-                        $cond: [
-                            { $in: ['$status', ['Hoàn thành', 'completed']] },
-                            1,
-                            { $cond: [
-                                { $in: ['$status', ['Đang cập nhật', 'on-going']] },
-                                2,
-                                3
-                            ]}
-                        ]
-                    }
-                }
-            });
-        }
-
         // Add relevance stage if searching by title
         if (Object.keys(relevanceStage).length > 0) {
             aggregationPipeline.push(relevanceStage);
@@ -490,6 +484,7 @@ exports.getBooksAdvancedSearch = async (req, res) => {
         // Add sort stage
         aggregationPipeline.push({ $sort: sortOptions });
 
+        // Add pagination and lookup stages
         aggregationPipeline.push(
             { $skip: skip },
             { $limit: safeLimit },

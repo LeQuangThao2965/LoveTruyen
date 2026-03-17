@@ -9,14 +9,7 @@ const POPULAR_GENRES = [
     'Dã Sử', 'Khoa Huyễn', 'Kinh Dị', 'Hài Hước', 'Truyện Ma',
     'Trinh Thám', 'Tiểu Thuyết', 'Lịch Sử', 'Võng Du', 'Dị Giới',
     'Hệ Thống', 'Hậu Cung', 'Cổ Trang', 'Ngược', 'Sủng',
-    'HE', 'SE', 'BL', 'GL', 'Hướng nội',
-    'Xuyên Nhi', 'Dị Năng', 'Sủng Thê', 'Ngọt Văn', 'Cung Đấu',
-    'Huyền Ảo', 'Kiếm Tiên', 'Đại Chiến', 'Hài Hước', 'Lãng Mạn',
-    'Thiếu Nhi', 'Diễn Nghệ', 'Cung Tử', 'Bách Hợp', 'Trọng Sinh',
-    'Quân Sự', 'Hành Động', 'Khoa Học Viễn Tưởng', 'Thể Thao', 'Đấu Phá',
-    'Mạt Thế', 'Dân Tộc', 'Gia Đình', 'Giáo Dục', 'Kinh Tế',
-    'Chính Trị', 'Pháp Luật', 'Tâm Lý', 'Xã Hội', 'Văn Hóa',
-    'Kỹ Thuật', 'Y Học', 'Thần Thoại', 'Bí Ẩn', 'Linh Tinh'
+    'HE', 'SE', 'BL', 'GL', 'Hướng nội'
 ];
 
 const SearchAdvanced = () => {
@@ -72,9 +65,6 @@ const SearchAdvanced = () => {
             
             const response = await api.get('/books/search-advanced', { params });
             
-            console.log('API Response:', response);
-            console.log('Books data:', response.books);
-            console.log('Books length:', response.books?.length);
             setBooks(response.books || []);
             setPagination(response.pagination || pagination);
             
@@ -365,7 +355,7 @@ const SearchAdvanced = () => {
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mb-6">
                                 {books.map((book, index) => (
                                     <HomeBookCard 
-                                        key={`${(book._id || `book-${index}`)}-${index}`} 
+                                        key={book._id || `search-book-${index}`} 
                                         book={book} 
                                     />
                                 ))}
