@@ -57,6 +57,8 @@ const SearchAdvanced = () => {
             if (filters.genres.length > 0) params.append('genres', filters.genres.join(','));
             if (filters.year_start) params.append('year_start', filters.year_start);
             if (filters.year_end) params.append('year_end', filters.year_end);
+            if (filters.sort_by) params.append('sort_by', filters.sort_by);
+            if (filters.sort_order) params.append('sort_order', filters.sort_order);
             params.append('page', page.toString());
             params.append('limit', '20');
             
@@ -146,6 +148,35 @@ const SearchAdvanced = () => {
                     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sticky top-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4">Bộ Lọc Tìm Kiếm</h2>
                         
+                        {/* Sort Options */}
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Sắp xếp theo
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <select
+                                    value={filters.sort_by}
+                                    onChange={(e) => handleFilterChange('sort_by', e.target.value)}
+                                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                >
+                                    <option value="relevance">Độ liên quan</option>
+                                    <option value="updated_at">Ngày cập nhật mới nhất</option>
+                                    <option value="createdAt">Ngày đăng</option>
+                                    <option value="total_views">Lượt đọc</option>
+                                    <option value="total_chapters">Số chương</option>
+                                    <option value="rating">Đánh giá</option>
+                                </select>
+                                <select
+                                    value={filters.sort_order}
+                                    onChange={(e) => handleFilterChange('sort_order', e.target.value)}
+                                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                >
+                                    <option value="desc">Giảm dần</option>
+                                    <option value="asc">Tăng dần</option>
+                                </select>
+                            </div>
+                        </div>
+
                         {/* Title Search */}
                         <div className="mb-4">
                             <label className="block text-sm font-medium text-gray-700 mb-2">

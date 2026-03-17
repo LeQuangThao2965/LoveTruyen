@@ -366,6 +366,8 @@ exports.getBooksAdvancedSearch = async (req, res) => {
             genres,
             year_start,
             year_end,
+            sort_by = 'relevance',
+            sort_order = 'desc',
             page = 1,
             limit = 20
         } = req.query;
@@ -403,43 +405,107 @@ exports.getBooksAdvancedSearch = async (req, res) => {
             }
         }
 
-        // Execute aggregation
-        const [books, total] = await Promise.all([
-            Book.aggregate([
-                { $match: matchConditions },
-                { $sort: { updatedAt: -1, total_views: -1 } },
-                { $skip: skip },
-                { $limit: safeLimit },
-                {
-                    $lookup: {
-                        from: 'chapters',
-                        let: { bookId: '$_id' },
-                        pipeline: [
-                            { $match: { $expr: { $eq: ['$book_id', '$$bookId'] } } },
-                            { $sort: { chapter_number: -1 } },
-                            { $limit: 2 },
-                            { $project: { title: 1, chapter_number: 1 } }
+        // Add relevance scoring for title search
+        let relevanceStage = {};
+        if (title && typeof title === 'string' && title.trim()) {
+            relevanceStage = {
+                $addFields: {
+                    relevanceScore: {
+                        $cond: [
+                            { $regexMatch: { input: { $toLower: '$title' }, regex: title.trim().toLowerCase() } }
                         ],
-                        as: 'latest_chapters'
-                    }
-                },
-                {
-                    $project: {
-                        title: 1,
-                        author: 1,
-                        description: 1,
-                        cover_url: 1,
-                        genres: 1,
-                        status: 1,
-                        total_chapters: 1,
-                        total_views: 1,
-                        weekly_views: 1,
-                        latest_chapters: 1,
-                        createdAt: 1,
-                        updatedAt: 1
+                        then: 10,
+                        else: 0
                     }
                 }
-            ]),
+            };
+        }
+
+        // Build sort options
+        let sortOptions = {};
+        if (sort_by) {
+            switch (sort_by) {
+                case 'relevance':
+                    // Mặc định: relevance score (nếu có title search) + updated_at
+                    sortOptions = {
+                        $sort: {
+                            total_views: -1, // Phụ cho relevance
+                            updated_at: -1
+                        }
+                    };
+                    break;
+                case 'updated_at':
+                    sortOptions = { updated_at: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'createdAt':
+                    sortOptions = { createdAt: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'total_views':
+                    sortOptions = { total_views: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'total_chapters':
+                    sortOptions = { total_chapters: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'rating':
+                    sortOptions = { rating: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                default:
+                    sortOptions = { updated_at: -1, total_views: -1 };
+            }
+        } else {
+            // Mặc định nếu không có sort_by: updated_at + total_views
+            sortOptions = { updated_at: -1, total_views: -1 };
+        }
+
+        // Execute aggregation
+        const aggregationPipeline = [
+            { $match: matchConditions }
+        ];
+
+        // Add relevance stage if searching by title
+        if (Object.keys(relevanceStage).length > 0) {
+            aggregationPipeline.push(relevanceStage);
+        }
+
+        // Add sort stage
+        aggregationPipeline.push({ $sort: sortOptions });
+
+        aggregationPipeline.push(
+            { $skip: skip },
+            { $limit: safeLimit },
+            {
+                $lookup: {
+                    from: 'chapters',
+                    let: { bookId: '$_id' },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ['$book_id', '$$bookId'] } } },
+                        { $sort: { chapter_number: -1 } },
+                        { $limit: 2 },
+                        { $project: { title: 1, chapter_number: 1 } }
+                    ],
+                    as: 'latest_chapters'
+                }
+            },
+            {
+                $project: {
+                    title: 1,
+                    author: 1,
+                    description: 1,
+                    cover_url: 1,
+                    genres: 1,
+                    status: 1,
+                    total_chapters: 1,
+                    total_views: 1,
+                    weekly_views: 1,
+                    latest_chapters: 1,
+                    createdAt: 1,
+                    updatedAt: 1
+                }
+            }
+        );
+
+        const [books, total] = await Promise.all([
+            Book.aggregate(aggregationPipeline),
             Book.countDocuments(matchConditions)
         ]);
 
@@ -458,7 +524,9 @@ exports.getBooksAdvancedSearch = async (req, res) => {
                 title: title || '',
                 genres: genres || '',
                 year_start: year_start || '',
-                year_end: year_end || ''
+                year_end: year_end || '',
+                sort_by: sort_by || 'relevance',
+                sort_order: sort_order || 'desc'
             }
         });
     } catch (error) {
