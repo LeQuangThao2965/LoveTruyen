@@ -3,6 +3,7 @@ const router = express.Router();
 const {
     getBooks,
     searchBooks,
+    getBookSuggestions,
     getHotBooksWeekly,
     getBookById,
     createBook,
@@ -11,6 +12,9 @@ const {
 
 // Danh sach truyen (co kem 2 chapter moi nhat cho moi truyen)
 router.get('/', getBooks);
+
+// Gợi ý tìm kiếm (autocomplete)
+router.get('/suggestions', getBookSuggestions);
 
 // Tìm kiếm truyện nâng cao
 router.get('/search', searchBooks);

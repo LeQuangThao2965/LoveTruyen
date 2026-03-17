@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import AuthModal from './AuthModal'; 
+import AuthModal from './AuthModal';
+import api from '../services/axiosConfig'; 
 
 // Bộ Icon SVG tinh tế hơn (Đã xóa Settings, thêm Icon Admin & Host)
 const Icons = {
@@ -76,6 +77,13 @@ const Header = () => {
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const searchInputRef = useRef(null);
+    
+    // Autocomplete states
+    const [suggestions, setSuggestions] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [selectedIndex, setSelectedIndex] = useState(-1);
+    const [loading, setLoading] = useState(false);
+    const debounceTimeoutRef = useRef(null);
     
     // State cho Dropdown
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -190,9 +198,14 @@ const Header = () => {
 
     const handleSearchSubmit = (e) => {
         e.preventDefault();
-        if (searchQuery.trim()) {
+        if (selectedIndex >= 0 && suggestions.length > 0) {
+            // Nếu có suggestion được chọn, navigate đến trang chi tiết
+            handleSuggestionClick(suggestions[selectedIndex]);
+        } else if (searchQuery.trim()) {
+            // Nếu không có suggestion được chọn, navigate đến trang tìm kiếm
             navigate(`/search-advanced?q=${encodeURIComponent(searchQuery.trim())}`);
             setIsSearchOpen(false);
+            setShowSuggestions(false);
         }
     };
 
@@ -204,8 +217,103 @@ const Header = () => {
     const handleSearchKeyDown = (e) => {
         if (e.key === 'Enter') {
             handleSearchSubmit(e);
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (showSuggestions && suggestions.length > 0) {
+                setSelectedIndex(prev => 
+                    prev < suggestions.length - 1 ? prev + 1 : prev
+                );
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (showSuggestions && suggestions.length > 0) {
+                setSelectedIndex(prev => prev > 0 ? prev - 1 : -1);
+            }
+        } else if (e.key === 'Escape') {
+            setShowSuggestions(false);
+            setSelectedIndex(-1);
         }
     };
+
+    // Fetch suggestions với debounce
+    const fetchSuggestions = async (query) => {
+        if (query.trim().length < 2) {
+            setSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const response = await api.get('/books/suggestions', {
+                params: { q: query.trim(), limit: 8 }
+            });
+            
+            setSuggestions(response.suggestions || []);
+            setShowSuggestions(true);
+            setSelectedIndex(-1);
+        } catch (error) {
+            console.error('Lỗi lấy gợi ý:', error);
+            setSuggestions([]);
+            setShowSuggestions(false);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Handle input change với debounce
+    const handleInputChange = (e) => {
+        const value = e.target.value;
+        setSearchQuery(value);
+        
+        // Clear previous timeout
+        if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+        }
+        
+        // Debounce search
+        if (value.trim().length >= 2) {
+            debounceTimeoutRef.current = setTimeout(() => {
+                fetchSuggestions(value);
+            }, 300);
+        } else {
+            setSuggestions([]);
+            setShowSuggestions(false);
+        }
+    };
+
+    // Handle suggestion click
+    const handleSuggestionClick = (suggestion) => {
+        navigate(`/truyen/${suggestion.id}`);
+        setShowSuggestions(false);
+        setSearchQuery('');
+        setSelectedIndex(-1);
+        setIsSearchOpen(false);
+    };
+
+    // Cleanup suggestions khi click outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (searchRef.current && !searchRef.current.contains(event.target)) {
+                setShowSuggestions(false);
+                setSelectedIndex(-1);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
+
+    // Cleanup debounce timeout
+    useEffect(() => {
+        return () => {
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current);
+            }
+        };
+    }, []);
 
     const getAvatarUrl = (user) => {
         if (!user) return '';
@@ -240,7 +348,7 @@ const Header = () => {
                     <div className="flex items-center gap-3 md:gap-5">
                         
                         {/* 1. SEARCH BOX */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2" ref={searchRef}>
                             <div
                                 className={`flex items-center overflow-hidden rounded-full border bg-gray-100/80 transition-all duration-300 ${
                                     isSearchOpen
@@ -252,7 +360,7 @@ const Header = () => {
                                     ref={searchInputRef}
                                     type="text"
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onChange={handleInputChange}
                                     onKeyDown={handleSearchKeyDown}
                                     placeholder="Tim truyen..."
                                     className={`bg-transparent text-sm text-gray-700 outline-none placeholder-gray-400 transition-all duration-200 ${
@@ -267,9 +375,53 @@ const Header = () => {
                                     onClick={isSearchOpen ? handleSearchSubmit : handleSearchToggle}
                                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition hover:text-indigo-600"
                                 >
-                                    <Icons.Search />
+                                    {loading ? (
+                                        <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+                                    ) : (
+                                        <Icons.Search />
+                                    )}
                                 </button>
                             </div>
+
+                            {/* Suggestions Dropdown */}
+                            {showSuggestions && isSearchOpen && (
+                                <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+                                    {suggestions.length > 0 ? (
+                                        suggestions.map((suggestion, index) => (
+                                            <div
+                                                key={suggestion.id}
+                                                onClick={() => handleSuggestionClick(suggestion)}
+                                                className={`flex items-center p-3 cursor-pointer transition-colors ${
+                                                    index === selectedIndex 
+                                                        ? 'bg-indigo-50 border-l-4 border-indigo-600' 
+                                                        : 'hover:bg-gray-50'
+                                                }`}
+                                            >
+                                                <img
+                                                    src={suggestion.thumbnail}
+                                                    alt={suggestion.title}
+                                                    className="w-10 h-14 object-cover rounded mr-3 shrink-0"
+                                                    onError={(e) => {
+                                                        e.currentTarget.src = 'https://placehold.co/60x80/e5e7eb/6b7280?text=No+Cover';
+                                                    }}
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-sm font-medium text-gray-900 truncate">
+                                                        {suggestion.title}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500">
+                                                        {suggestion.views?.toLocaleString('vi-VN') || 0} lượt đọc
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="p-4 text-center text-gray-500 text-sm">
+                                            Không tìm thấy truyện phù hợp
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Nút Tìm Kiếm Nâng Cao */}
                             <button

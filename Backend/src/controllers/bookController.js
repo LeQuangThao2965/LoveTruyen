@@ -140,6 +140,89 @@ exports.getBooks = async (req, res) => {
 };
 
 // GET /api/books/hot-weekly?limit=10
+// API gợi ý tìm kiếm (autocomplete)
+exports.getBookSuggestions = async (req, res) => {
+    try {
+        const { q: query, limit = 8 } = req.query;
+
+        if (!query || query.trim().length < 2) {
+            return res.json({ suggestions: [] });
+        }
+
+        const safeLimit = Math.min(10, Math.max(1, Number(limit) || 8));
+
+        const suggestions = await Book.aggregate([
+            {
+                $match: {
+                    $text: {
+                        $search: query.trim(),
+                        $caseSensitive: false,
+                        $diacriticSensitive: false
+                    }
+                }
+            },
+            {
+                $addFields: {
+                    score: { $meta: 'textScore' },
+                    // Tính relevance score dựa trên match với title
+                    titleMatch: {
+                        $cond: {
+                            if: { $eq: [{ $strLenCP: { $toLower: query } }, { $strLenCP: { $toLower: '$title' } }] },
+                            then: 1,
+                            else: {
+                                $cond: {
+                                    if: { $regexMatch: { input: { $toLower: '$title' }, regex: { $toLower: query } } },
+                                    then: 0.8,
+                                    else: 0.5
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                $addFields: {
+                    finalScore: {
+                        $multiply: ['$score', '$titleMatch', 10]
+                    }
+                }
+            },
+            { $sort: { finalScore: -1, total_views: -1 } },
+            { $limit: safeLimit },
+            {
+                $project: {
+                    _id: 1,
+                    title: 1,
+                    cover_url: 1,
+                    total_views: 1,
+                    finalScore: 1
+                }
+            }
+        ]);
+
+        const PLACEHOLDER_COVER = 'https://placehold.co/60x80/e5e7eb/6b7280?text=No+Cover';
+
+        res.json({
+            suggestions: suggestions.map(book => ({
+                id: book._id,
+                title: book.title,
+                thumbnail: book.cover_url || PLACEHOLDER_COVER,
+                views: book.total_views || 0,
+                score: book.finalScore
+            })),
+            query: query.trim(),
+            total: suggestions.length
+        });
+
+    } catch (error) {
+        console.error('Lỗi lấy gợi ý sách:', error);
+        res.status(500).json({
+            error: 'Lỗi server khi lấy gợi ý sách',
+            message: error.message
+        });
+    }
+};
+
 // Tìm kiếm truyện nâng cao
 exports.searchBooks = async (req, res) => {
     try {
