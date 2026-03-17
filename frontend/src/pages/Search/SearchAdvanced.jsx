@@ -68,7 +68,7 @@ const SearchAdvanced = () => {
             const response = await api.get('/books/search-advanced', { params });
             
             setBooks(response.books || []);
-            setPagination(response.pagination || pagination);
+            setPagination(prev => ({ ...prev, ...response.pagination }));
             
             // Update URL params
             setSearchParams(params);
@@ -80,7 +80,7 @@ const SearchAdvanced = () => {
         } finally {
             setLoading(false);
         }
-    }, [filters, setLoading, setError, setBooks, setPagination, setSearchParams]);
+    }, [filters.title, filters.genres, filters.year_start, filters.year_end, filters.status, filters.sort_by, filters.sort_order, setSearchParams]);
 
     // Handle filter changes
     const handleFilterChange = (field, value) => {
