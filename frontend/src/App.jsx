@@ -6,11 +6,11 @@ import Header from './components/Header';
 import ProtectedRoute from './components/ProtectedRoute';
 import CrawlBooks from './pages/AdminCT/CrawlBooks';
 import HomePage from './pages/Home/HomePage';
-import SearchPage from './pages/Search/SearchPage';
 import ManageBooks from './pages/HostCT/MyBooks';
 import BookDetail from './pages/Books/BookDetail';
 import ReadChapter from './pages/Books/ReadChapter';
 import UserProfile from './pages/UserSettings/UserProfile';
+import SearchPage from './pages/Search/SearchPage';
 
 const shouldHideMainHeader = (pathname = '') =>
   /^\/truyen\/[^/]+\/chuong\/\d+$/.test(pathname);
@@ -26,9 +26,9 @@ const AppLayout = () => {
       <main className={hideHeader ? '' : 'pb-10'}>
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/search-advanced" element={<SearchPage />} />
           <Route path="/truyen/:bookId" element={<BookDetail />} />
           <Route path="/truyen/:bookId/chuong/:chapterNumber" element={<ReadChapter />} />
+          <Route path="/search" element={<SearchPage />} />
 
           <Route
             path="/profile"

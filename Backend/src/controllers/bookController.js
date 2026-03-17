@@ -100,11 +100,20 @@ const latestChapterLookupStage = {
 // Tra ve danh sach truyen kem 2 chapter moi nhat cho moi truyen.
 exports.getBooks = async (req, res) => {
     try {
-        const { uploader_id, status, limit, page } = req.query;
+        const { uploader_id, status, limit, page, title } = req.query;
         const query = {};
 
         if (uploader_id) query.uploader_id = uploader_id;
         if (status) query.status = status;
+        
+        // Thêm tìm kiếm theo title
+        if (title && typeof title === 'string' && title.trim()) {
+            const searchRegex = new RegExp(
+                title.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), // Escape special characters
+                'i' // Case insensitive
+            );
+            query.title = { $regex: searchRegex };
+        }
 
         const safeLimit = Math.min(
             parsePositiveInt(limit, DEFAULT_GET_BOOK_LIMIT),
@@ -140,296 +149,6 @@ exports.getBooks = async (req, res) => {
 };
 
 // GET /api/books/hot-weekly?limit=10
-// API gợi ý tìm kiếm (autocomplete)
-exports.getBookSuggestions = async (req, res) => {
-    try {
-        const { q: query, limit = 8 } = req.query;
-
-        if (!query || query.trim().length < 1) {
-            return res.json({ suggestions: [] });
-        }
-
-        const safeLimit = Math.min(10, Math.max(1, Number(limit) || 8));
-        const searchQuery = query.trim();
-
-        // Tìm kiếm với nhiều phương thức cho kết quả tốt hơn
-        const suggestions = await Book.aggregate([
-            {
-                $match: {
-                    $or: [
-                        // Text search cho từ khóa đầy đủ
-                        {
-                            $text: {
-                                $search: searchQuery,
-                                $caseSensitive: false,
-                                $diacriticSensitive: false
-                            }
-                        },
-                        // Regex search cho từng chữ cái
-                        {
-                            title: {
-                                $regex: searchQuery,
-                                $options: 'i'
-                            }
-                        },
-                        // Regex search cho từng chữ cái (không dấu)
-                        {
-                            title: {
-                                $regex: searchQuery
-                                    .normalize('NFD')
-                                    .replace(/[\u0300-\u036f]/g, ''),
-                                $options: 'i'
-                            }
-                        }
-                    ]
-                }
-            },
-            {
-                $addFields: {
-                    // Tính relevance score
-                    textScore: { 
-                        $ifNull: [{ $meta: 'textScore' }, 0] 
-                    },
-                    // Exact match bonus
-                    exactMatch: {
-                        $cond: {
-                            if: { 
-                                $eq: [
-                                    { $toLower: searchQuery }, 
-                                    { $toLower: '$title' }
-                                ] 
-                            },
-                            then: 1,
-                            else: 0
-                        }
-                    },
-                    // Prefix match bonus
-                    prefixMatch: {
-                        $cond: {
-                            if: {
-                                $regexMatch: {
-                                    input: { $toLower: '$title' },
-                                    regex: `^${searchQuery.toLowerCase()}`
-                                }
-                            },
-                            then: 0.8,
-                            else: 0
-                        }
-                    },
-                    // Contains match bonus
-                    containsMatch: {
-                        $cond: {
-                            if: {
-                                $regexMatch: {
-                                    input: { $toLower: '$title' },
-                                    regex: searchQuery.toLowerCase()
-                                }
-                            },
-                            then: 0.6,
-                            else: 0
-                        }
-                    }
-                }
-            },
-            {
-                $addFields: {
-                    finalScore: {
-                        $add: [
-                            { $multiply: ['$textScore', 10] },
-                            { $multiply: ['$exactMatch', 5] },
-                            { $multiply: ['$prefixMatch', 3] },
-                            { $multiply: ['$containsMatch', 1] },
-                            { $divide: ['$total_views', 1000000] } // View count bonus
-                        ]
-                    }
-                }
-            },
-            { $sort: { finalScore: -1, total_views: -1 } },
-            { $limit: safeLimit },
-            {
-                $project: {
-                    _id: 1,
-                    title: 1,
-                    cover_url: 1,
-                    total_views: 1,
-                    finalScore: 1
-                }
-            }
-        ]);
-
-        const PLACEHOLDER_COVER = 'https://placehold.co/60x80/e5e7eb/6b7280?text=No+Cover';
-
-        res.json({
-            suggestions: suggestions.map(book => ({
-                id: book._id,
-                title: book.title,
-                thumbnail: book.cover_url || PLACEHOLDER_COVER,
-                views: book.total_views || 0,
-                score: book.finalScore
-            })),
-            query: searchQuery,
-            total: suggestions.length
-        });
-
-    } catch (error) {
-        console.error('Lỗi lấy gợi ý sách:', error);
-        res.status(500).json({
-            error: 'Lỗi server khi lấy gợi ý sách',
-            message: error.message
-        });
-    }
-};
-
-// Tìm kiếm truyện nâng cao
-exports.searchBooks = async (req, res) => {
-    try {
-        const {
-            q: query,
-            genre,
-            status,
-            year_start,
-            year_end,
-            sort = 'updatedAt',
-            page = 1,
-            limit = 12
-        } = req.query;
-
-        // Build match stage
-        const matchStage = {};
-
-        // Text search
-        if (query && query.trim()) {
-            matchStage.$text = {
-                $search: query.trim(),
-                $caseSensitive: false,
-                $diacriticSensitive: false
-            };
-        }
-
-        // Multi-genre filter (support comma-separated genres)
-        if (genre && genre.trim()) {
-            const genres = genre.split(',').map(g => g.trim()).filter(g => g);
-            if (genres.length > 0) {
-                matchStage.genres = {
-                    $in: genres
-                };
-            }
-        }
-
-        // Status filter
-        if (status && status.trim()) {
-            matchStage.status = status.trim();
-        }
-
-        // Year range filter
-        if (year_start || year_end) {
-            matchStage.publication_year = {};
-            if (year_start) {
-                const startYear = parseInt(year_start);
-                if (!isNaN(startYear) && startYear >= 1900) {
-                    matchStage.publication_year.$gte = startYear;
-                }
-            }
-            if (year_end) {
-                const endYear = parseInt(year_end);
-                if (!isNaN(endYear) && endYear <= new Date().getFullYear() + 1) {
-                    matchStage.publication_year.$lte = endYear;
-                }
-            }
-            // Remove empty year filter if no valid conditions
-            if (Object.keys(matchStage.publication_year).length === 0) {
-                delete matchStage.publication_year;
-            }
-        }
-
-        // Sort options
-        let sortStage = {};
-        switch (sort) {
-            case 'total_views':
-                sortStage = { total_views: -1, updatedAt: -1 };
-                break;
-            case 'title':
-                sortStage = { title: 1, updatedAt: -1 };
-                break;
-            case 'publication_year':
-                sortStage = { publication_year: -1, updatedAt: -1 };
-                break;
-            case 'createdAt':
-                sortStage = { createdAt: -1 };
-                break;
-            case 'updatedAt':
-            default:
-                sortStage = { updatedAt: -1 };
-                break;
-        }
-
-        const safePage = Math.max(1, Number(page) || 1);
-        const safeLimit = Math.min(50, Math.max(1, Number(limit) || 12));
-        const skip = (safePage - 1) * safeLimit;
-
-        const [books, total] = await Promise.all([
-            Book.aggregate([
-                { $match: matchStage },
-                { $sort: sortStage },
-                { $skip: skip },
-                { $limit: safeLimit },
-                {
-                    $lookup: {
-                        from: 'chapters',
-                        localField: '_id',
-                        foreignField: 'book_id',
-                        as: 'latest_chapters',
-                        pipeline: [
-                            { $sort: { chapter_number: -1 } },
-                            { $limit: 2 }
-                        ]
-                    }
-                },
-                {
-                    $project: {
-                        title: 1,
-                        author: 1,
-                        description: 1,
-                        cover_url: 1,
-                        genres: 1,
-                        publication_year: 1,
-                        status: 1,
-                        total_chapters: 1,
-                        total_views: 1,
-                        weekly_views_current: 1,
-                        weekly_views_start: 1,
-                        latest_chapters: 1,
-                        createdAt: 1,
-                        updatedAt: 1,
-                        // Add text search score if searching
-                        ...(query && { score: { $meta: 'textScore' } })
-                    }
-                }
-            ]),
-            Book.countDocuments(matchStage)
-        ]);
-
-        const totalPages = Math.ceil(total / safeLimit);
-
-        res.json({
-            books,
-            total,
-            page: safePage,
-            limit: safeLimit,
-            totalPages,
-            hasNextPage: safePage < totalPages,
-            hasPrevPage: safePage > 1
-        });
-
-    } catch (error) {
-        console.error('Lỗi tìm kiếm sách:', error);
-        res.status(500).json({
-            error: 'Lỗi server khi tìm kiếm sách',
-            message: error.message
-        });
-    }
-};
-
 exports.getHotBooksWeekly = async (req, res) => {
     try {
         const safeLimit = Math.min(
@@ -586,6 +305,93 @@ exports.createBook = async (req, res) => {
         console.error('Loi API dang truyen:', error);
         return res.status(500).json({
             error: 'May chu dang gap su co, vui long thu lai!'
+        });
+    }
+};
+
+// GET /api/books/suggestions?q=<keyword>
+exports.getBookSuggestions = async (req, res) => {
+    try {
+        const { q } = req.query;
+        
+        // Validate query parameter
+        if (!q || typeof q !== 'string' || q.trim().length < 2) {
+            return res.json([]);
+        }
+
+        const keyword = q.trim();
+        const limit = Math.min(parsePositiveInt(req.query.limit, 10), 20);
+
+        // Tạo regex không phân biệt hoa thường và có dấu
+        const searchRegex = new RegExp(
+            keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), // Escape special characters
+            'i' // Case insensitive
+        );
+
+        // Aggregate query để tìm sách phù hợp
+        const suggestions = await Book.aggregate([
+            {
+                $match: {
+                    $or: [
+                        { title: { $regex: searchRegex } },
+                        { author: { $regex: searchRegex } },
+                        { 
+                            $expr: {
+                                $anyElementTrue: {
+                                    $map: {
+                                        input: '$genres',
+                                        as: 'genre',
+                                        in: { $regexMatch: { input: '$$genre', regex: searchRegex } }
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                $addFields: {
+                    // Tính điểm relevance cho việc sắp xếp
+                    relevanceScore: {
+                        $add: [
+                            { $cond: [{ $regexMatch: { input: '$title', regex: searchRegex } }, 10, 0] },
+                            { $cond: [{ $regexMatch: { input: '$author', regex: searchRegex } }, 5, 0] },
+                            { $multiply: [{ $size: '$genres' }, 1] }
+                        ]
+                    }
+                }
+            },
+            {
+                $sort: {
+                    relevanceScore: -1, // Điểm relevance cao nhất trước
+                    total_views: -1,     // Lượt xem cao hơn trước
+                    updatedAt: -1        // Mới cập nhật trước
+                }
+            },
+            {
+                $limit: limit
+            },
+            {
+                $project: {
+                    _id: 1,
+                    title: 1,
+                    author: 1,
+                    cover_url: 1,
+                    total_chapters: 1,
+                    total_views: 1,
+                    genres: 1,
+                    status: 1,
+                    updatedAt: 1
+                }
+            }
+        ]);
+
+        return res.json(suggestions);
+
+    } catch (error) {
+        console.error('Loi khi fetch suggestions:', error);
+        return res.status(500).json({
+            error: 'Khong the lay gợi ý tìm kiếm. Vui long thu lai.'
         });
     }
 };
