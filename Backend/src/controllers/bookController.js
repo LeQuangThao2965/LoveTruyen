@@ -386,7 +386,9 @@ exports.getBooksAdvancedSearch = async (req, res) => {
 
         // Genres filter (AND condition - phải có tất cả genres được chọn)
         if (genres && typeof genres === 'string') {
-            const genresArray = genres.split(',').map(g => g.trim()).filter(g => g);
+            // Decode URL encoded genres và split
+            const decodedGenres = decodeURIComponent(genres);
+            const genresArray = decodedGenres.split(',').map(g => g.trim()).filter(g => g);
             if (genresArray.length > 0) {
                 matchConditions.genres = { $all: genresArray };
             }

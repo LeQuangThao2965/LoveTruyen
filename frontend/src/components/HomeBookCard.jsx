@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 
-const PLACEHOLDER_COVER = 'https://via.placeholder.com/300x400?text=No+Cover';
+const PLACEHOLDER_COVER = 'https://picsum.photos/seed/nocover/300x400.jpg';
 
 const HomeBookCard = ({ book, ranking }) => {
     const bookId = book?._id || '';
