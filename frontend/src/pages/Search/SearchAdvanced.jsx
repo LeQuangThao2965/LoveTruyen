@@ -50,9 +50,6 @@ const SearchAdvanced = () => {
 
     // Fetch search results
     const fetchSearchResults = useCallback(async (page = 1) => {
-        console.log('fetchSearchResults called with page:', page);
-        console.log('Current filters:', filters);
-        
         setLoading(true);
         setError('');
         
@@ -127,21 +124,17 @@ const SearchAdvanced = () => {
 
     // Handle pagination
     const handlePageChange = (newPage) => {
-        console.log('handlePageChange called with:', newPage);
-        console.log('Current pagination:', pagination);
         if (newPage >= 1 && newPage <= pagination.totalPages) {
-            console.log('Calling fetchSearchResults with page:', newPage);
             fetchSearchResults(newPage);
-        } else {
-            console.log('Invalid page number:', newPage);
         }
     };
 
     // Initial load
     useEffect(() => {
-        // Luôn load danh sách truyện khi vào page
+        // Chỉ load lần đầu khi vào page
         fetchSearchResults(1);
-    }, [fetchSearchResults]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <div className="container mx-auto px-4 py-6">
