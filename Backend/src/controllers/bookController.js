@@ -145,37 +145,88 @@ exports.getBookSuggestions = async (req, res) => {
     try {
         const { q: query, limit = 8 } = req.query;
 
-        if (!query || query.trim().length < 2) {
+        if (!query || query.trim().length < 1) {
             return res.json({ suggestions: [] });
         }
 
         const safeLimit = Math.min(10, Math.max(1, Number(limit) || 8));
+        const searchQuery = query.trim();
 
+        // Tìm kiếm với nhiều phương thức cho kết quả tốt hơn
         const suggestions = await Book.aggregate([
             {
                 $match: {
-                    $text: {
-                        $search: query.trim(),
-                        $caseSensitive: false,
-                        $diacriticSensitive: false
-                    }
+                    $or: [
+                        // Text search cho từ khóa đầy đủ
+                        {
+                            $text: {
+                                $search: searchQuery,
+                                $caseSensitive: false,
+                                $diacriticSensitive: false
+                            }
+                        },
+                        // Regex search cho từng chữ cái
+                        {
+                            title: {
+                                $regex: searchQuery,
+                                $options: 'i'
+                            }
+                        },
+                        // Regex search cho từng chữ cái (không dấu)
+                        {
+                            title: {
+                                $regex: searchQuery
+                                    .normalize('NFD')
+                                    .replace(/[\u0300-\u036f]/g, ''),
+                                $options: 'i'
+                            }
+                        }
+                    ]
                 }
             },
             {
                 $addFields: {
-                    score: { $meta: 'textScore' },
-                    // Tính relevance score dựa trên match với title
-                    titleMatch: {
+                    // Tính relevance score
+                    textScore: { 
+                        $ifNull: [{ $meta: 'textScore' }, 0] 
+                    },
+                    // Exact match bonus
+                    exactMatch: {
                         $cond: {
-                            if: { $eq: [{ $strLenCP: { $toLower: query } }, { $strLenCP: { $toLower: '$title' } }] },
+                            if: { 
+                                $eq: [
+                                    { $toLower: searchQuery }, 
+                                    { $toLower: '$title' }
+                                ] 
+                            },
                             then: 1,
-                            else: {
-                                $cond: {
-                                    if: { $regexMatch: { input: { $toLower: '$title' }, regex: { $toLower: query } } },
-                                    then: 0.8,
-                                    else: 0.5
+                            else: 0
+                        }
+                    },
+                    // Prefix match bonus
+                    prefixMatch: {
+                        $cond: {
+                            if: {
+                                $regexMatch: {
+                                    input: { $toLower: '$title' },
+                                    regex: `^${searchQuery.toLowerCase()}`
                                 }
-                            }
+                            },
+                            then: 0.8,
+                            else: 0
+                        }
+                    },
+                    // Contains match bonus
+                    containsMatch: {
+                        $cond: {
+                            if: {
+                                $regexMatch: {
+                                    input: { $toLower: '$title' },
+                                    regex: searchQuery.toLowerCase()
+                                }
+                            },
+                            then: 0.6,
+                            else: 0
                         }
                     }
                 }
@@ -183,7 +234,13 @@ exports.getBookSuggestions = async (req, res) => {
             {
                 $addFields: {
                     finalScore: {
-                        $multiply: ['$score', '$titleMatch', 10]
+                        $add: [
+                            { $multiply: ['$textScore', 10] },
+                            { $multiply: ['$exactMatch', 5] },
+                            { $multiply: ['$prefixMatch', 3] },
+                            { $multiply: ['$containsMatch', 1] },
+                            { $divide: ['$total_views', 1000000] } // View count bonus
+                        ]
                     }
                 }
             },
@@ -210,7 +267,7 @@ exports.getBookSuggestions = async (req, res) => {
                 views: book.total_views || 0,
                 score: book.finalScore
             })),
-            query: query.trim(),
+            query: searchQuery,
             total: suggestions.length
         });
 
