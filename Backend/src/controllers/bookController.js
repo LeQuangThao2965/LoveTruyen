@@ -413,14 +413,17 @@ exports.getBooksAdvancedSearch = async (req, res) => {
 
         // Add relevance scoring for title search
         let relevanceStage = {};
+        // Tạm thời bỏ relevance scoring để fix 500 error
+        // TODO: Implement proper relevance scoring sau
+        /*
         if (title && typeof title === 'string' && title.trim()) {
             relevanceStage = {
                 $addFields: {
                     relevanceScore: {
                         $cond: [
-                            { $gte: [
+                            { $ne: [
                                 { $indexOfCP: [{ $toLower: '$title' }, title.trim().toLowerCase()] },
-                                0
+                                -1
                             ] }
                         ],
                         then: 10,
@@ -429,6 +432,7 @@ exports.getBooksAdvancedSearch = async (req, res) => {
                 }
             };
         }
+        */
 
         // Build sort options
         let sortOptions = {};
