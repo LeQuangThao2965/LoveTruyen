@@ -6,7 +6,8 @@ const {
     getBookById,
     createBook,
     uploadBookCover,
-    getBookSuggestions
+    getBookSuggestions,
+    getBooksAdvancedSearch
 } = require('../controllers/bookController');
 
 // Danh sach truyen (co kem 2 chapter moi nhat cho moi truyen)
@@ -17,6 +18,9 @@ router.get('/hot-weekly', getHotBooksWeekly);
 
 // Gợi ý tìm kiếm
 router.get('/suggestions', getBookSuggestions);
+
+// Tìm kiếm nâng cao
+router.get('/search-advanced', getBooksAdvancedSearch);
 
 // Upload anh bia
 router.post('/upload-cover', uploadBookCover);

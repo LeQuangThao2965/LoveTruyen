@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import api from '../services/axiosConfig';
@@ -75,13 +75,10 @@ const Header = () => {
     const [userRole, setUserRole] = useState('user'); // State riêng biệt cho Role
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
-    
-    // State cho tìm kiếm với autocomplete
     const [searchQuery, setSearchQuery] = useState('');
     const [suggestions, setSuggestions] = useState([]);
-    const [selectedIndex, setSelectedIndex] = useState(-1);
-    const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
-    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+    const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
     
     // State cho Dropdown
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -91,7 +88,6 @@ const Header = () => {
     const adminDropdownRef = useRef(null);
     const searchRef = useRef(null);
     const searchInputRef = useRef(null);
-    const suggestionsRef = useRef(null);
 
     // Xử lý Auth riêng
     useEffect(() => {
@@ -114,10 +110,6 @@ const Header = () => {
             }
             if (searchRef.current && !searchRef.current.contains(event.target)) {
                 setIsSearchOpen(false);
-                setShowSuggestions(false);
-            }
-            if (suggestionsRef.current && !suggestionsRef.current.contains(event.target)) {
-                setShowSuggestions(false);
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
@@ -190,133 +182,128 @@ const Header = () => {
     };
 
 
-    // Fetch suggestions từ API
-    const fetchSuggestions = useCallback(async (query) => {
-        if (!query.trim() || query.length < 2) {
+    const handleSearchToggle = () => {
+        setIsSearchOpen((prev) => !prev);
+        if (!isSearchOpen) {
+            // Focus vào input khi mở search
+            setTimeout(() => searchInputRef.current?.focus(), 100);
+        } else {
+            // Clear khi đóng
+            setSearchQuery('');
             setSuggestions([]);
-            setShowSuggestions(false);
+            setSelectedSuggestionIndex(-1);
+        }
+    };
+
+    // Fetch suggestions từ API
+    const fetchSuggestions = async (query) => {
+        if (!query || query.trim().length < 2) {
+            setSuggestions([]);
             return;
         }
 
-        setIsLoadingSuggestions(true);
+        setIsSuggestionsLoading(true);
         try {
             const response = await api.get('/books/suggestions', {
-                params: { q: query.trim() }
+                params: { q: query.trim(), limit: 8 }
             });
             setSuggestions(response || []);
-            setShowSuggestions(true);
-            setSelectedIndex(-1);
+            setSelectedSuggestionIndex(-1);
         } catch (error) {
             console.error('Lỗi khi fetch suggestions:', error);
             setSuggestions([]);
-            setShowSuggestions(false);
         } finally {
-            setIsLoadingSuggestions(false);
+            setIsSuggestionsLoading(false);
         }
-    }, []);
-
-    // Debounce function
-    const debounce = (func, delay) => {
-        let timeoutId;
-        return (...args) => {
-            clearTimeout(timeoutId);
-            timeoutId = setTimeout(() => func.apply(null, args), delay);
-        };
     };
 
-    // Debounced fetch suggestions
-    const debouncedFetchSuggestions = useCallback(debounce(fetchSuggestions, 300), [fetchSuggestions]);
+    // Debounce search
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            fetchSuggestions(searchQuery);
+        }, 300);
 
-    // Handler cho input change
+        return () => clearTimeout(timeoutId);
+    }, [searchQuery]);
+
+    // Handle input change
     const handleSearchInputChange = (e) => {
         const value = e.target.value;
         setSearchQuery(value);
-        setSelectedIndex(-1);
-        
-        if (value.trim()) {
-            debouncedFetchSuggestions(value);
-        } else {
-            setSuggestions([]);
-            setShowSuggestions(false);
-        }
+        setSelectedSuggestionIndex(-1);
     };
 
-    // Handler cho keyboard navigation
+    // Handle keyboard navigation
     const handleSearchKeyDown = (e) => {
-        if (!showSuggestions || suggestions.length === 0) {
-            if (e.key === 'Enter' && searchQuery.trim()) {
-                handleSearchSubmit();
-            }
-            return;
-        }
+        if (!suggestions.length) return;
 
         switch (e.key) {
             case 'ArrowDown':
                 e.preventDefault();
-                setSelectedIndex(prev => 
-                    prev < suggestions.length - 1 ? prev + 1 : prev
+                setSelectedSuggestionIndex(prev => 
+                    prev < suggestions.length - 1 ? prev + 1 : 0
                 );
                 break;
             case 'ArrowUp':
                 e.preventDefault();
-                setSelectedIndex(prev => prev > 0 ? prev - 1 : -1);
+                setSelectedSuggestionIndex(prev => 
+                    prev > 0 ? prev - 1 : suggestions.length - 1
+                );
                 break;
             case 'Enter':
                 e.preventDefault();
-                if (selectedIndex >= 0) {
-                    const selectedBook = suggestions[selectedIndex];
+                if (selectedSuggestionIndex >= 0) {
+                    const selectedBook = suggestions[selectedSuggestionIndex];
                     navigate(`/truyen/${selectedBook._id}`);
-                    resetSearch();
+                    setSearchQuery('');
+                    setSuggestions([]);
+                    setSelectedSuggestionIndex(-1);
+                    setIsSearchOpen(false);
                 } else {
                     handleSearchSubmit();
                 }
                 break;
             case 'Escape':
-                setShowSuggestions(false);
-                setSelectedIndex(-1);
+                setSearchQuery('');
+                setSuggestions([]);
+                setSelectedSuggestionIndex(-1);
                 break;
         }
     };
 
-    // Handler cho submit tìm kiếm
+    // Handle search submit
     const handleSearchSubmit = () => {
         const query = searchQuery.trim();
         if (query) {
-            if (selectedIndex >= 0 && suggestions[selectedIndex]) {
-                navigate(`/truyen/${suggestions[selectedIndex]._id}`);
+            if (selectedSuggestionIndex >= 0) {
+                const selectedBook = suggestions[selectedSuggestionIndex];
+                navigate(`/truyen/${selectedBook._id}`);
             } else {
                 navigate(`/search?q=${encodeURIComponent(query)}`);
             }
-            resetSearch();
+            setSearchQuery('');
+            setSuggestions([]);
+            setSelectedSuggestionIndex(-1);
+            setIsSearchOpen(false);
         }
     };
 
-    // Reset search state
-    const resetSearch = () => {
+    // Handle suggestion click
+    const handleSuggestionClick = (book) => {
+        navigate(`/truyen/${book._id}`);
         setSearchQuery('');
         setSuggestions([]);
-        setShowSuggestions(false);
-        setSelectedIndex(-1);
+        setSelectedSuggestionIndex(-1);
         setIsSearchOpen(false);
     };
 
-    // Handler cho click vào suggestion
-    const handleSuggestionClick = (book) => {
-        navigate(`/truyen/${book._id}`);
-        resetSearch();
-    };
-
-    const handleSearchToggle = () => {
-        setIsSearchOpen((prev) => !prev);
-        if (!isSearchOpen) {
-            // Mở search, focus vào input
-            setTimeout(() => {
-                searchInputRef.current?.focus();
-            }, 100);
-        } else {
-            // Đóng search, reset state
-            resetSearch();
-        }
+    // Navigate to advanced search
+    const handleAdvancedSearch = () => {
+        navigate('/search-advanced');
+        setSearchQuery('');
+        setSuggestions([]);
+        setSelectedSuggestionIndex(-1);
+        setIsSearchOpen(false);
     };
     const getAvatarUrl = (user) => {
         if (!user) return '';
@@ -356,7 +343,7 @@ const Header = () => {
                                 <div
                                     className={`flex items-center overflow-hidden rounded-full border bg-gray-100/80 transition-all duration-300 ${
                                         isSearchOpen
-                                            ? 'w-64 border-indigo-200 px-3 py-1.5 shadow-sm'
+                                            ? 'w-80 border-indigo-200 px-3 py-1.5 shadow-sm'
                                             : 'w-10 border-transparent p-0 hover:bg-gray-100'
                                     }`}
                                 >
@@ -383,56 +370,62 @@ const Header = () => {
                                     </button>
                                 </div>
 
-                                {/* Suggestions Dropdown */}
-                                {showSuggestions && (
-                                    <div 
-                                        ref={suggestionsRef}
-                                        className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 max-h-80 overflow-y-auto z-50"
-                                    >
-                                        {isLoadingSuggestions ? (
-                                            <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                                                Đang tìm kiếm...
-                                            </div>
-                                        ) : suggestions.length > 0 ? (
-                                            suggestions.map((book, index) => (
-                                                <div
-                                                    key={book._id}
-                                                    onClick={() => handleSuggestionClick(book)}
-                                                    className={`flex items-center px-4 py-3 cursor-pointer transition-colors ${
-                                                        index === selectedIndex 
-                                                            ? 'bg-indigo-50 border-l-2 border-indigo-500' 
-                                                            : 'hover:bg-gray-50'
-                                                    }`}
-                                                >
-                                                    <img 
-                                                        src={book.cover_url || 'https://via.placeholder.com/60x80?text=No+Cover'}
-                                                        alt={book.title}
-                                                        className="w-12 h-16 object-cover rounded mr-3 flex-shrink-0"
-                                                        onError={(e) => {
-                                                            e.target.onerror = null;
-                                                            e.target.src = 'https://via.placeholder.com/60x80?text=No+Cover';
-                                                        }}
-                                                    />
-                                                    <div className="flex-1 min-w-0">
-                                                        <h4 className="text-sm font-medium text-gray-900 truncate">
-                                                            {book.title}
-                                                        </h4>
-                                                        <p className="text-xs text-gray-500 truncate">
-                                                            {book.author}
-                                                        </p>
-                                                        {book.total_chapters > 0 && (
-                                                            <p className="text-xs text-indigo-600">
-                                                                {book.total_chapters} chương
-                                                            </p>
-                                                        )}
+                                {/* Dropdown Container */}
+                                {isSearchOpen && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                                        {/* Suggestions */}
+                                        {suggestions.length > 0 && (
+                                            <div className="max-h-80 overflow-y-auto">
+                                                {suggestions.map((book, index) => (
+                                                    <div
+                                                        key={book._id}
+                                                        onClick={() => handleSuggestionClick(book)}
+                                                        className={`flex items-center px-3 py-2 cursor-pointer transition-colors ${
+                                                            index === selectedSuggestionIndex
+                                                                ? 'bg-indigo-50 border-l-2 border-indigo-500'
+                                                                : 'hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        <img
+                                                            src={book.cover_url || 'https://via.placeholder.com/40x56?text=No+Cover'}
+                                                            alt={book.title}
+                                                            className="w-10 h-14 object-cover rounded mr-3 shrink-0"
+                                                            onError={(e) => {
+                                                                e.target.src = 'https://via.placeholder.com/40x56?text=No+Cover';
+                                                            }}
+                                                        />
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="text-sm font-medium text-gray-900 truncate">
+                                                                {book.title}
+                                                            </div>
+                                                            <div className="text-xs text-gray-500 truncate">
+                                                                {book.author}
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                                                Không tìm thấy truyện phù hợp
+                                                ))}
                                             </div>
                                         )}
+
+                                        {/* No Results Message */}
+                                        {searchQuery.trim().length >= 2 && !isSuggestionsLoading && suggestions.length === 0 && (
+                                            <div className="p-3 border-t border-gray-200">
+                                                <div className="text-sm text-gray-500 text-center">
+                                                    Không tìm thấy truyện phù hợp
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Advanced Search Button */}
+                                        <div className="border-t border-gray-200">
+                                            <button
+                                                onClick={handleAdvancedSearch}
+                                                className="w-full px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center justify-center"
+                                            >
+                                                <Icons.Search className="w-4 h-4 mr-2" />
+                                                Tìm kiếm nâng cao
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                             </div>

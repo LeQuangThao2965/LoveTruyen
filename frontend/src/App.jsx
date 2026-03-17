@@ -10,7 +10,8 @@ import ManageBooks from './pages/HostCT/MyBooks';
 import BookDetail from './pages/Books/BookDetail';
 import ReadChapter from './pages/Books/ReadChapter';
 import UserProfile from './pages/UserSettings/UserProfile';
-import SearchPage from './pages/Search/SearchPage';
+import Search from './pages/Search/Search';
+import SearchAdvanced from './pages/Search/SearchAdvanced';
 
 const shouldHideMainHeader = (pathname = '') =>
   /^\/truyen\/[^/]+\/chuong\/\d+$/.test(pathname);
@@ -28,7 +29,10 @@ const AppLayout = () => {
           <Route path="/" element={<HomePage />} />
           <Route path="/truyen/:bookId" element={<BookDetail />} />
           <Route path="/truyen/:bookId/chuong/:chapterNumber" element={<ReadChapter />} />
-          <Route path="/search" element={<SearchPage />} />
+          
+          {/* Search Routes */}
+          <Route path="/search" element={<Search />} />
+          <Route path="/search-advanced" element={<SearchAdvanced />} />
 
           <Route
             path="/profile"
