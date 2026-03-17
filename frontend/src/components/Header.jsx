@@ -234,10 +234,9 @@ const Header = () => {
             setSelectedIndex(-1);
         }
     };
-
     // Fetch suggestions với debounce
     const fetchSuggestions = async (query) => {
-        if (query.trim().length < 2) {
+        if (query.trim().length < 1) {
             setSuggestions([]);
             setShowSuggestions(false);
             return;
@@ -271,8 +270,8 @@ const Header = () => {
             clearTimeout(debounceTimeoutRef.current);
         }
         
-        // Debounce search
-        if (value.trim().length >= 2) {
+        // Debounce search - bắt đầu từ 1 chữ cái
+        if (value.trim().length >= 1) {
             debounceTimeoutRef.current = setTimeout(() => {
                 fetchSuggestions(value);
             }, 300);
@@ -385,7 +384,7 @@ const Header = () => {
 
                             {/* Suggestions Dropdown */}
                             {showSuggestions && isSearchOpen && (
-                                <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+                                <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
                                     {suggestions.length > 0 ? (
                                         suggestions.map((suggestion, index) => (
                                             <div
