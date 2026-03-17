@@ -362,7 +362,7 @@ const SearchAdvanced = () => {
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mb-6">
                                 {books.map((book, index) => (
                                     <HomeBookCard 
-                                        key={book._id || `search-book-${index}`} 
+                                        key={`${book._id || ''}-${index}`} 
                                         book={book} 
                                     />
                                 ))}
