@@ -20,14 +20,34 @@ const SearchPage = () => {
     const [totalPages, setTotalPages] = useState(1);
     const [totalBooks, setTotalBooks] = useState(0);
     const [currentPage, setCurrentPage] = useState(1);
+    const [selectedGenres, setSelectedGenres] = useState([]);
 
     const query = searchParams.get('q') || '';
     const genre = searchParams.get('genre') || '';
     const status = searchParams.get('status') || '';
+    const yearStart = searchParams.get('year_start') || '';
+    const yearEnd = searchParams.get('year_end') || '';
     const sortBy = searchParams.get('sort') || 'updatedAt';
 
+    // Available genres for multi-select
+    const availableGenres = [
+        'Tiên Hiệp', 'Huyền Huyễn', 'Đô Thị', 'Lịch Sử', 'Kiếm Hiệp',
+        'Ngôn Tình', 'Dã Sử', 'Khoa Học', 'Đồng Nhân', 'Hài Hước',
+        'Máu Đầu', 'Cổ Trang', 'Hài Hước', 'Light Novel', 'Truyện Ma'
+    ];
+
+    // Initialize selected genres from URL params
+    useEffect(() => {
+        if (genre) {
+            const genres = genre.split(',').filter(g => g.trim());
+            setSelectedGenres(genres);
+        } else {
+            setSelectedGenres([]);
+        }
+    }, [genre]);
+
     const fetchSearchResults = useCallback(async (page = 1) => {
-        if (!query.trim() && !genre && !status) {
+        if (!query.trim() && selectedGenres.length === 0 && !status && !yearStart && !yearEnd) {
             setBooks([]);
             setTotalBooks(0);
             setTotalPages(1);
@@ -44,6 +64,8 @@ const SearchPage = () => {
                 ...(query.trim() && { q: query.trim() }),
                 ...(genre && { genre }),
                 ...(status && { status }),
+                ...(yearStart && { year_start: yearStart }),
+                ...(yearEnd && { year_end: yearEnd }),
                 ...(sortBy && { sort: sortBy })
             });
 
@@ -66,7 +88,7 @@ const SearchPage = () => {
         } finally {
             setLoading(false);
         }
-    }, [query, genre, status, sortBy]);
+    }, [query, selectedGenres, genre, status, yearStart, yearEnd, sortBy]);
 
     useEffect(() => {
         fetchSearchResults(1);
@@ -90,10 +112,43 @@ const SearchPage = () => {
     const handleFilterChange = (filterType, value) => {
         const newParams = new URLSearchParams(searchParams);
         
-        if (value) {
-            newParams.set(filterType, value);
+        if (filterType === 'genre') {
+            // Handle multi-genre selection
+            if (selectedGenres.includes(value)) {
+                // Remove genre
+                const newGenres = selectedGenres.filter(g => g !== value);
+                setSelectedGenres(newGenres);
+                if (newGenres.length > 0) {
+                    newParams.set('genre', newGenres.join(','));
+                } else {
+                    newParams.delete('genre');
+                }
+            } else {
+                // Add genre
+                const newGenres = [...selectedGenres, value];
+                setSelectedGenres(newGenres);
+                newParams.set('genre', newGenres.join(','));
+            }
         } else {
-            newParams.delete(filterType);
+            // Handle other filters
+            if (value) {
+                newParams.set(filterType, value);
+            } else {
+                newParams.delete(filterType);
+            }
+        }
+        
+        newParams.delete('page'); // Reset về trang 1
+        setSearchParams(newParams);
+    };
+
+    const handleYearRangeChange = (type, value) => {
+        const newParams = new URLSearchParams(searchParams);
+        
+        if (value && value.trim()) {
+            newParams.set(type, value.trim());
+        } else {
+            newParams.delete(type);
         }
         
         newParams.delete('page'); // Reset về trang 1
@@ -115,6 +170,7 @@ const SearchPage = () => {
         const status = book?.status || 'Đang cập nhật';
         const totalChapters = Number(book?.total_chapters || 0);
         const totalViews = Number(book?.total_views || 0);
+        const publicationYear = book?.publication_year;
 
         return (
             <article className="group flex h-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition hover:shadow-md">
@@ -136,6 +192,11 @@ const SearchPage = () => {
                     <span className="absolute left-2 top-2 rounded bg-blue-500 px-2 py-1 text-[11px] font-bold text-white">
                         {status}
                     </span>
+                    {publicationYear && (
+                        <span className="absolute right-2 top-2 rounded bg-gray-800/80 px-2 py-1 text-[11px] font-bold text-white">
+                            {publicationYear}
+                        </span>
+                    )}
                 </Link>
 
                 <div className="flex flex-1 flex-col p-3">
@@ -187,23 +248,32 @@ const SearchPage = () => {
 
                     {/* Filters */}
                     <div className="flex flex-wrap gap-4">
+                        {/* Multi-Genre Filter */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Thể loại</label>
-                            <select
-                                value={genre}
-                                onChange={(e) => handleFilterChange('genre', e.target.value)}
-                                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
-                            >
-                                <option value="">Tất cả</option>
-                                <option value="Tiên Hiệp">Tiên Hiệp</option>
-                                <option value="Huyền Huyễn">Huyền Huyễn</option>
-                                <option value="Đô Thị">Đô Thị</option>
-                                <option value="Lịch Sử">Lịch Sử</option>
-                                <option value="Kiếm Hiệp">Kiếm Hiệp</option>
-                                <option value="Ngôn Tình">Ngôn Tình</option>
-                            </select>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Thể loại (chọn nhiều)</label>
+                            <div className="max-w-xs">
+                                <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-2 border border-gray-300 rounded-lg bg-white">
+                                    {availableGenres.map((g) => (
+                                        <label key={g} className="flex items-center text-xs">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedGenres.includes(g)}
+                                                onChange={() => handleFilterChange('genre', g)}
+                                                className="mr-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                            />
+                                            {g}
+                                        </label>
+                                    ))}
+                                </div>
+                                {selectedGenres.length > 0 && (
+                                    <div className="mt-1 text-xs text-gray-500">
+                                        Đã chọn: {selectedGenres.join(', ')}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
+                        {/* Status Filter */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>
                             <select
@@ -218,6 +288,33 @@ const SearchPage = () => {
                             </select>
                         </div>
 
+                        {/* Year Range Filter */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Năm xuất bản</label>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="number"
+                                    placeholder="Từ"
+                                    value={yearStart}
+                                    onChange={(e) => handleYearRangeChange('year_start', e.target.value)}
+                                    min="1900"
+                                    max={new Date().getFullYear() + 1}
+                                    className="w-20 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+                                />
+                                <span className="text-gray-500">-</span>
+                                <input
+                                    type="number"
+                                    placeholder="Đến"
+                                    value={yearEnd}
+                                    onChange={(e) => handleYearRangeChange('year_end', e.target.value)}
+                                    min="1900"
+                                    max={new Date().getFullYear() + 1}
+                                    className="w-20 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Sort Options */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Sắp xếp</label>
                             <select
@@ -228,6 +325,7 @@ const SearchPage = () => {
                                 <option value="updatedAt">Mới cập nhật</option>
                                 <option value="total_views">Lượt đọc</option>
                                 <option value="title">Tên A-Z</option>
+                                <option value="publication_year">Năm xuất bản</option>
                                 <option value="createdAt">Ngày đăng</option>
                             </select>
                         </div>
@@ -264,7 +362,7 @@ const SearchPage = () => {
                 )}
 
                 {/* No Results */}
-                {!loading && !error && books.length === 0 && (query || genre || status) && (
+                {!loading && !error && books.length === 0 && (query || selectedGenres.length > 0 || status || yearStart || yearEnd) && (
                     <div className="text-center py-8">
                         <div className="text-gray-500 mb-2">Không tìm thấy kết quả nào</div>
                         <div className="text-sm text-gray-400">
@@ -274,9 +372,9 @@ const SearchPage = () => {
                 )}
 
                 {/* No Search */}
-                {!loading && !error && !query && !genre && !status && (
+                {!loading && !error && !query && selectedGenres.length === 0 && !status && !yearStart && !yearEnd && (
                     <div className="text-center py-8">
-                        <div className="text-gray-500 mb-2">Nhập từ khóa để tìm kiếm truyện</div>
+                        <div className="text-gray-500 mb-2">Nhập từ khóa hoặc chọn bộ lọc để tìm kiếm truyện</div>
                     </div>
                 )}
 

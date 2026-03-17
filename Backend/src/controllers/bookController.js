@@ -147,6 +147,8 @@ exports.searchBooks = async (req, res) => {
             q: query,
             genre,
             status,
+            year_start,
+            year_end,
             sort = 'updatedAt',
             page = 1,
             limit = 12
@@ -164,16 +166,40 @@ exports.searchBooks = async (req, res) => {
             };
         }
 
-        // Genre filter
+        // Multi-genre filter (support comma-separated genres)
         if (genre && genre.trim()) {
-            matchStage.genres = {
-                $in: [genre.trim()]
-            };
+            const genres = genre.split(',').map(g => g.trim()).filter(g => g);
+            if (genres.length > 0) {
+                matchStage.genres = {
+                    $in: genres
+                };
+            }
         }
 
         // Status filter
         if (status && status.trim()) {
             matchStage.status = status.trim();
+        }
+
+        // Year range filter
+        if (year_start || year_end) {
+            matchStage.publication_year = {};
+            if (year_start) {
+                const startYear = parseInt(year_start);
+                if (!isNaN(startYear) && startYear >= 1900) {
+                    matchStage.publication_year.$gte = startYear;
+                }
+            }
+            if (year_end) {
+                const endYear = parseInt(year_end);
+                if (!isNaN(endYear) && endYear <= new Date().getFullYear() + 1) {
+                    matchStage.publication_year.$lte = endYear;
+                }
+            }
+            // Remove empty year filter if no valid conditions
+            if (Object.keys(matchStage.publication_year).length === 0) {
+                delete matchStage.publication_year;
+            }
         }
 
         // Sort options
@@ -184,6 +210,9 @@ exports.searchBooks = async (req, res) => {
                 break;
             case 'title':
                 sortStage = { title: 1, updatedAt: -1 };
+                break;
+            case 'publication_year':
+                sortStage = { publication_year: -1, updatedAt: -1 };
                 break;
             case 'createdAt':
                 sortStage = { createdAt: -1 };
@@ -223,6 +252,7 @@ exports.searchBooks = async (req, res) => {
                         description: 1,
                         cover_url: 1,
                         genres: 1,
+                        publication_year: 1,
                         status: 1,
                         total_chapters: 1,
                         total_views: 1,

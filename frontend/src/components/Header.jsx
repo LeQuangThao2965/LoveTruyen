@@ -196,6 +196,11 @@ const Header = () => {
         }
     };
 
+    const handleAdvancedSearch = () => {
+        navigate('/search-advanced');
+        setIsSearchOpen(false);
+    };
+
     const handleSearchKeyDown = (e) => {
         if (e.key === 'Enter') {
             handleSearchSubmit(e);
@@ -234,8 +239,8 @@ const Header = () => {
                     {/* RIGHT GROUP */}
                     <div className="flex items-center gap-3 md:gap-5">
                         
-                        {/* 1. THANH TIM KIEM */}
-                        <div className="hidden md:flex items-center" ref={searchRef}>
+                        {/* 1. SEARCH BOX */}
+                        <div className="flex items-center gap-2">
                             <div
                                 className={`flex items-center overflow-hidden rounded-full border bg-gray-100/80 transition-all duration-300 ${
                                     isSearchOpen
@@ -265,6 +270,16 @@ const Header = () => {
                                     <Icons.Search />
                                 </button>
                             </div>
+
+                            {/* Nút Tìm Kiếm Nâng Cao */}
+                            <button
+                                type="button"
+                                onClick={handleAdvancedSearch}
+                                className="hidden sm:flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                            >
+                                <Icons.Search />
+                                <span>Tìm kiếm nâng cao</span>
+                            </button>
                         </div>
 
                         {/* 2. MENU QUẢN TRỊ VIÊN (Chỉ hiện nếu là admin) */}

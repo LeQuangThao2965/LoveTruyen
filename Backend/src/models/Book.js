@@ -20,6 +20,12 @@ const bookSchema = new mongoose.Schema({
         type: [String],
         default: []
     },
+    publication_year: {
+        type: Number,
+        min: 1900,
+        max: new Date().getFullYear() + 1,
+        default: null
+    },
     // URL ảnh bìa lấy từ Supabase Storage.
     cover_url: {
         type: String,
