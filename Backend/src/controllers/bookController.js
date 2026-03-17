@@ -3,6 +3,21 @@ const path = require('path');
 const mongoose = require('mongoose');
 const Book = require('../models/Book');
 
+// Helper function to remove Vietnamese diacritics
+function removeDiacritics(str) {
+    return str
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[đĐ]/g, (match) => match === 'đ' ? 'd' : 'D');
+}
+
+// Helper function to parse positive integer
+const parsePositiveInt = (value, fallback) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return Math.floor(parsed);
+};
+
 const MAX_COVER_SIZE_BYTES = 5 * 1024 * 1024;
 const COVER_UPLOAD_DIR = path.resolve(__dirname, '../../../frontend/public/uploaded_covers');
 const DEFAULT_GET_BOOK_LIMIT = 100;
@@ -38,12 +53,6 @@ const parseBase64Image = (value = '') => {
     if (!buffer.length) return null;
 
     return { mimeType, buffer };
-};
-
-const parsePositiveInt = (value, fallback) => {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-    return Math.floor(parsed);
 };
 
 const getWeekStart = (value = new Date()) => {
@@ -380,9 +389,18 @@ exports.getBooksAdvancedSearch = async (req, res) => {
         // Build match conditions
         const matchConditions = {};
 
-        // Title search (case-insensitive regex)
+        // Title search (case-insensitive, Vietnamese diacritics aware)
         if (title && typeof title === 'string' && title.trim()) {
-            matchConditions.title = { $regex: title.trim(), $options: 'i' };
+            const searchTitle = title.trim();
+            const searchTitleNoDiacritics = removeDiacritics(searchTitle);
+            
+            // Search in both title and title_no_diacritics fields
+            matchConditions.$or = [
+                { title: { $regex: searchTitle, $options: 'i' } },
+                { title_no_diacritics: { $regex: searchTitle, $options: 'i' } },
+                { title: { $regex: searchTitleNoDiacritics, $options: 'i' } },
+                { title_no_diacritics: { $regex: searchTitleNoDiacritics, $options: 'i' } }
+            ];
         }
 
         // Genres filter (AND condition - phải có tất cả genres được chọn)

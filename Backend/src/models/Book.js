@@ -2,10 +2,16 @@
 const mongoose = require('mongoose');
 
 const bookSchema = new mongoose.Schema({
-    title: {
-        type: String,
+    title: { 
+        type: String, 
         required: true,
-        trim: true
+        trim: true,
+        index: 'text'
+    },
+    title_no_diacritics: {
+        type: String,
+        trim: true,
+        index: 'text'
     },
     author: {
         type: String,
@@ -58,6 +64,28 @@ const bookSchema = new mongoose.Schema({
     }
 }, {
     timestamps: true
+});
+
+// Pre-save middleware to automatically generate title_no_diacritics
+bookSchema.pre('save', function(next) {
+    if (this.title && this.isModified('title')) {
+        this.title_no_diacritics = this.title
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[đĐ]/g, (match) => match === 'đ' ? 'd' : 'D');
+    }
+    next();
+});
+
+bookSchema.pre('findOneAndUpdate', function(next) {
+    const update = this.getUpdate();
+    if (update.title) {
+        update.title_no_diacritics = update.title
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[đĐ]/g, (match) => match === 'đ' ? 'd' : 'D');
+    }
+    next();
 });
 
 bookSchema.index({ updatedAt: -1 });
