@@ -407,32 +407,28 @@ exports.getBooksAdvancedSearch = async (req, res) => {
 
         // Add relevance scoring for title search
         let relevanceStage = {};
-        if (title && typeof title === 'string' && title.trim()) {
-            relevanceStage = {
-                $addFields: {
-                    relevanceScore: {
-                        $cond: [
-                            { $regexMatch: { input: { $toLower: '$title' }, regex: title.trim().toLowerCase() } }
-                        ],
-                        then: 10,
-                        else: 0
-                    }
-                }
-            };
-        }
+        // Tạm thời bỏ relevance scoring để fix lỗi
+        // if (title && typeof title === 'string' && title.trim()) {
+        //     relevanceStage = {
+        //         $addFields: {
+        //             relevanceScore: {
+        //                 $cond: [
+        //                     { $regexMatch: { input: { $toLower: '$title' }, regex: title.trim().toLowerCase() } }
+        //                 ],
+        //                 then: 10,
+        //                 else: 0
+        //             }
+        //         }
+        //     };
+        // }
 
         // Build sort options
         let sortOptions = {};
         if (sort_by) {
             switch (sort_by) {
                 case 'relevance':
-                    // Mặc định: relevance score (nếu có title search) + updated_at
-                    sortOptions = {
-                        $sort: {
-                            total_views: -1, // Phụ cho relevance
-                            updated_at: -1
-                        }
-                    };
+                    // Mặc định: total_views + updated_at
+                    sortOptions = { total_views: -1, updated_at: -1 };
                     break;
                 case 'updated_at':
                     sortOptions = { updated_at: sort_order === 'desc' ? -1 : 1 };
