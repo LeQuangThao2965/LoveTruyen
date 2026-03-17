@@ -72,6 +72,9 @@ const SearchAdvanced = () => {
             
             const response = await api.get('/books/search-advanced', { params });
             
+            console.log('API Response:', response);
+            console.log('Books data:', response.books);
+            console.log('Books length:', response.books?.length);
             setBooks(response.books || []);
             setPagination(response.pagination || pagination);
             
