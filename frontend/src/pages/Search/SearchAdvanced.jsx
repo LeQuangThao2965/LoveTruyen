@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../services/axiosConfig';
 import HomeBookCard from '../../components/HomeBookCard';
 
@@ -14,14 +14,15 @@ const POPULAR_GENRES = [
 
 const SearchAdvanced = () => {
     const [searchParams, setSearchParams] = useSearchParams();
-    const navigate = useNavigate();
     
     // State cho filters
     const [filters, setFilters] = useState({
         title: searchParams.get('title') || '',
         genres: searchParams.get('genres')?.split(',') || [],
         year_start: searchParams.get('year_start') || '',
-        year_end: searchParams.get('year_end') || ''
+        year_end: searchParams.get('year_end') || '',
+        sort_by: searchParams.get('sort_by') || 'relevance',
+        sort_order: searchParams.get('sort_order') || 'desc'
     });
     
     // State cho results
