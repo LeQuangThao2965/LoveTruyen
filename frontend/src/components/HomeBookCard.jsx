@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 
-const PLACEHOLDER_COVER = 'https://via.placeholder.com/300x400?text=No+Cover';
+const PLACEHOLDER_COVER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQwMCIgdmlld0JveD0iMCAwIDMwMCA0MDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iNDAwIiBmaWxsPSIjZTVlN2ViIi8+CjxwYXRoIGQ9Ik0xMjAgMTUwSDE4MFYxNjBIMTIwVjE1MFoiIGZpbGw9IiM2YjcyODAiLz4KPHBhdGggZD0iTTEwMCAyMDBIMjAwVjIxMEgxMDBWMjAwWiIgZmlsbD0iIzZiNzI4MCIvPgo8cGF0aCBkPSJNODAgMjUwSDIyMFYyNjBIODBWMjUwWiIgZmlsbD0iIzZiNzI4MCIvPgo8dGV4dCB4PSIxNTAiIHk9IjMzMCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE2IiBmaWxsPSIjNmI3MjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5ObyBDb3ZlcjwvdGV4dD4KPC9zdmc+';
 
 const HomeBookCard = ({ book, ranking }) => {
     const bookId = book?._id || '';

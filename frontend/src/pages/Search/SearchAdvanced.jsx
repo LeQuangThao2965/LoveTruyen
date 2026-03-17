@@ -126,16 +126,9 @@ const SearchAdvanced = () => {
 
     // Initial load
     useEffect(() => {
-        const hasActiveFilters = filters.title.trim() || 
-                               filters.genres.length > 0 || 
-                               filters.year_start || 
-                               filters.year_end ||
-                               filters.sort_by !== 'relevance' ||
-                               filters.sort_order !== 'desc';
-        if (hasActiveFilters) {
-            fetchSearchResults(1);
-        }
-    }, [fetchSearchResults, filters.title, filters.genres.length, filters.year_start, filters.year_end, filters.sort_by, filters.sort_order]);
+        // Luôn load danh sách truyện khi vào page
+        fetchSearchResults(1);
+    }, [fetchSearchResults]);
 
     return (
         <div className="container mx-auto px-4 py-6">
