@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import api from '../services/axiosConfig';
 import AuthModal from './AuthModal'; 
 
 // Bộ Icon SVG tinh tế hơn (Đã xóa Settings, thêm Icon Admin & Host)
@@ -115,6 +116,18 @@ const Header = () => {
         };
     }, []);
 
+    // 🚀 Gọi API kiểm tra profile khi user đăng nhập (để phát hiện bị ban)
+    useEffect(() => {
+        if (user) {
+            // Gọi API để kiểm tra trạng thái user
+            // Nếu user bị ban, axios interceptor sẽ xử lý 403 và hiện toast
+            api.get('/users/me/profile').catch((error) => {
+                // Lỗi đã được xử lý bởi axios interceptor
+                console.log('[Header] Profile check result:', error.response?.status || 'success');
+            });
+        }
+    }, [user]);
+
     useEffect(() => {
         if (isSearchOpen && searchInputRef.current) {
             searchInputRef.current.focus();
@@ -134,27 +147,28 @@ const Header = () => {
         };
     }, []);
 
-    // Xử lý Lấy Role (Tách biệt hoàn toàn để tránh crash App)
+    // Xử lý Lấy Role từ MongoDB (thay vì từ Supabase)
     useEffect(() => {
-        const fetchRole = async () => {
+        const fetchRoleFromMongoDB = async () => {
             if (user?.id) {
                 try {
-                    const { data, error } = await supabase
-                        .from('profiles')
-                        .select('role')
-                        .eq('id', user.id)
-                        .single();
-                    if (!error && data) {
-                        setUserRole(data.role);
+                    // Gọi API lấy profile từ MongoDB
+                    const response = await api.get('/users/me/profile');
+                    const profile = response.profile;
+                    
+                    // Cập nhật role từ MongoDB
+                    if (profile?.role) {
+                        setUserRole(profile.role);
                     }
                 } catch (err) {
-                    console.error(err);
+                    console.error('Failed to fetch profile from MongoDB:', err);
+                    setUserRole('user');
                 }
             } else {
                 setUserRole('user');
             }
         };
-        fetchRole();
+        fetchRoleFromMongoDB();
     }, [user?.id]); // Chỉ chạy khi ID user thay đổi
 
     const handleLogout = async () => {

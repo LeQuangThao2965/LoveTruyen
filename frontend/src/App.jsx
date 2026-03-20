@@ -5,6 +5,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import Header from './components/Header';
 import ProtectedRoute from './components/ProtectedRoute';
 import CrawlBooks from './pages/AdminCT/CrawlBooks';
+import UsersManage from './pages/AdminCT/UsersManage';
 import HomePage from './pages/Home/HomePage';
 import ManageBooks from './pages/HostCT/MyBooks';
 import BookDetail from './pages/Books/BookDetail';
@@ -60,6 +61,15 @@ const AppLayout = () => {
             element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <CrawlBooks />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <UsersManage />
               </ProtectedRoute>
             }
           />

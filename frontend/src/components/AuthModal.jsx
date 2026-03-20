@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { toast } from 'react-toastify';
+import api from '../services/axiosConfig';
 
 // Bộ Icon SVG (Không cần cài thư viện)
 const Icons = {
@@ -43,6 +44,10 @@ const AuthModal = ({ isOpen, onClose }) => {
         setFormData({ username: '', password: '', confirmPassword: '' });
     };
 
+    const handleClose = () => {
+        onClose();
+    };
+
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
@@ -67,7 +72,50 @@ const AuthModal = ({ isOpen, onClose }) => {
                     password: formData.password,
                 });
                 
-                if (error) throw error; 
+                if (error) throw error;
+
+                // 🚀 Gọi API kiểm tra trạng thái tài khoản (ban/mute)
+                try {
+                    await api.get('/users/me/profile');
+                } catch (apiError) {
+                    // 🚫 Nếu API trả về 403 -> Tài khoản bị ban
+                    if (apiError.response?.status === 403) {
+                        const errorData = apiError.response.data;
+                        
+                        // Xử lý lỗi tài khoản bị ban
+                        if (errorData?.code === 'ACCOUNT_BANNED') {
+                            const reason = errorData?.reason || 'Vi phạm quy định';
+                            const banTime = errorData?.banTime 
+                                ? new Date(errorData.banTime).toLocaleString('vi-VN')
+                                : 'Vĩnh viễn';
+                            
+                            // Hiện thông báo bằng toast với định dạng rõ ràng
+                            const message = `Tài khoản bị khóa!\n\nLý do: ${reason}\nThời gian: ${banTime}\n\nVui lòng đăng nhập lại sau.`;
+                            
+                            toast.error(message, {
+                                autoClose: 10000,
+                                pauseOnHover: true,
+                                closeOnClick: true,
+                            });
+                            
+                            // 1. Xóa token trước
+                            localStorage.removeItem('access_token');
+                            
+                            // 2. Đăng xuất khỏi Supabase
+                            await supabase.auth.signOut();
+                            
+                            setLoading(false);
+                            
+                            // 3. Delay 10 giây rồi đóng modal
+                            setTimeout(() => {
+                                onClose();
+                            }, 10000);
+                            
+                            return;
+                        }
+                    }
+                    // Các lỗi khác từ API, vẫn cho phép đăng nhập
+                }
                 
                 toast.success("Đăng nhập thành công!");
                 localStorage.setItem('access_token', data.session.access_token);
@@ -131,14 +179,14 @@ const AuthModal = ({ isOpen, onClose }) => {
     return (
         <div 
             className="fixed inset-0 z-[999] flex items-center justify-center bg-black/30 backdrop-blur-sm transition-opacity duration-300" 
-            onClick={onClose}
+            onClick={handleClose}
         >
             <div 
                 className="bg-white w-full max-w-md p-8 rounded-2xl shadow-2xl relative transform transition-all scale-100 animate-fade-in-up"
                 onClick={(e) => e.stopPropagation()} 
             >
                 <button 
-                    onClick={onClose}
+                    onClick={handleClose}
                     className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition p-1 hover:bg-gray-100 rounded-full"
                 >
                     <Icons.Times />

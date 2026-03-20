@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { toast } from 'react-toastify';
 import { supabase } from '../supabaseClient';
 
 // 1. Tạo instance (bản sao) của axios với cấu hình mặc định
@@ -29,9 +30,52 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use((response) => {
     // Nếu server trả về data ngon lành, chỉ lấy phần .data thôi
     return response.data; 
-}, (error) => {
-    // Nếu lỗi, log ra console hoặc hiển thị thông báo
-    console.error("API Error:", error.response?.data || error.message);
+}, async (error) => {
+    const errorData = error.response?.data;
+    const status = error.response?.status;
+    
+    // 🚫 Xử lý khi tài khoản bị ban
+    if (status === 403 && errorData?.code === 'ACCOUNT_BANNED') {
+        console.error('🚫 Tài khoản đã bị khóa:', errorData);
+        
+        const reason = errorData?.reason || 'Vi phạm quy định';
+        const banTime = errorData?.banTime 
+            ? new Date(errorData.banTime).toLocaleString('vi-VN')
+            : 'Vĩnh viễn';
+        
+        // Hiện thông báo Toast với định dạng rõ ràng
+        const message = `Tài khoản bị khóa!\n\nLý do: ${reason}\nThời gian: ${banTime}\n\nVui lòng đăng nhập lại sau.`;
+        
+        toast.error(message, {
+            autoClose: 10000,
+            pauseOnHover: true,
+            closeOnClick: true,
+        });
+        
+        // 1. Xóa token trước (quan trọng để không thể quay lại)
+        localStorage.removeItem('access_token');
+        
+        // 2. Đăng xuất khỏi Supabase
+        await supabase.auth.signOut();
+        
+        // 3. Delay 10 giây rồi mới redirect để user đọc thông báo
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 10000);
+        
+        return Promise.reject(error);
+    }
+    
+    // 🚫 Xử lý khi token hết hạn hoặc không hợp lệ
+    if (status === 401 && errorData?.code === 'TOKEN_INVALID') {
+        console.error('🔒 Phiên đăng nhập hết hạn');
+        await supabase.auth.signOut();
+        window.location.href = '/?session_expired=true';
+        return Promise.reject(error);
+    }
+    
+    // Nếu lỗi khác, log ra console
+    console.error("API Error:", errorData || error.message);
     return Promise.reject(error);
 });
 
