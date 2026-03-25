@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FaBookOpen, FaEdit, FaPlus, FaTrash } from 'react-icons/fa';
+import { FaBookOpen, FaChartBar, FaEdit, FaPlus, FaTrash } from 'react-icons/fa';
 import { supabase } from '../../supabaseClient';
 import api from '../../services/axiosConfig';
 import UploadBook from './UploadBook';
@@ -231,6 +231,12 @@ const MyBooks = () => {
                 >
                     <FaPlus /> Đăng Truyện Mới
                 </button>
+                <Link
+                    to="/host/stats"
+                    className="bg-white hover:bg-indigo-50 text-indigo-600 border border-indigo-300 px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow-sm shrink-0"
+                >
+                    <FaChartBar /> Xem Thống Kê
+                </Link>
             </div>
 
             <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
