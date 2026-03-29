@@ -147,16 +147,8 @@ const ReadChapter = () => {
 
     const goToChapter = (targetChapterNumber) => {
         if (!targetChapterNumber) return;
-        navigate(`/truyen/${bookId}/chuong/${targetChapterNumber}`);
+        navigate(`/truyen/${book.slug || book._id}/chuong/${targetChapterNumber}`);
     };
-
-    const paragraphs = useMemo(() => {
-        const rawContent = chapter?.content || '';
-        return rawContent
-            .split(/\n{2,}/g)
-            .map((item) => item.trim())
-            .filter(Boolean);
-    }, [chapter?.content]);
 
     if (loading) {
         return (
@@ -229,22 +221,14 @@ const ReadChapter = () => {
                         </h1>
                     </header>
 
-                    <div className="mt-6 text-[18px] leading-9 md:text-[20px] md:leading-10">
-                        {paragraphs.length === 0 ? (
-                            <p className="text-sm text-gray-500">Noi dung chuong dang rong.</p>
-                        ) : (
-                            paragraphs.map((paragraph, index) => (
-                                <p key={`${chapter._id || chapter.chapter_number}-p-${index}`} className="mb-6 indent-8">
-                                    {paragraph.split('\n').map((line, lineIndex, arr) => (
-                                        <span key={`${line}-${lineIndex}`}>
-                                            {line}
-                                            {lineIndex < arr.length - 1 ? <br /> : null}
-                                        </span>
-                                    ))}
-                                </p>
-                            ))
-                        )}
-                    </div>
+                    {/* SỬ DỤNG dangerouslySetInnerHTML ĐỂ RENDER HTML CHUẨN */}
+                    <div 
+                        className="mt-6 text-[18px] leading-9 md:text-[20px] md:leading-10 [&>p]:indent-8 [&>p]:mb-6 [&>h1]:text-2xl [&>h1]:font-bold [&>h1]:mb-4 text-justify"
+                        dangerouslySetInnerHTML={{ 
+                            __html: chapter?.content || '<p class="text-sm text-gray-500 text-center">Nội dung chương đang rỗng.</p>' 
+                        }}
+                    />
+                    
                 </article>
 
                 <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -263,7 +247,7 @@ const ReadChapter = () => {
                         </button>
 
                         <Link
-                            to={`/truyen/${bookId}`}
+                            to={`/truyen/${book.slug || book._id}`}
                             className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
                         >
                             Ve trang chi tiet truyen
