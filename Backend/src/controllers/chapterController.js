@@ -5,6 +5,15 @@ const Book = require('../models/Book');
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
+// Hàm thông minh tự động dịch Slug thành _id của Book
+const resolveBookId = async (idOrSlug) => {
+    if (mongoose.Types.ObjectId.isValid(idOrSlug)) {
+        return new mongoose.Types.ObjectId(idOrSlug);
+    }
+    const book = await Book.findOne({ slug: idOrSlug }).select('_id');
+    return book ? book._id : null;
+};
+
 const toObjectId = (value) => {
     if (!value || typeof value !== 'string') return null;
     if (!mongoose.Types.ObjectId.isValid(value)) return null;
@@ -172,11 +181,25 @@ exports.addChapter = async (req, res) => {
             });
         }
 
-        const chapter = await Chapter.findOneAndUpdate(
-            { book_id: bookId, chapter_number: chapterNumber },
-            { $set: { title, content } },
-            { new: true, upsert: true, setDefaultsOnInsert: true }
-        );
+        // Check if chapter with same book_id and chapter_number already exists
+        const existingChapter = await Chapter.findOne({ 
+            book_id: bookId, 
+            chapter_number: chapterNumber 
+        });
+
+        if (existingChapter) {
+            return res.status(400).json({
+                success: false,
+                message: `Chương ${chapterNumber} đã tồn tại cho truyện này. Vui lòng sử dụng số chương khác.`
+            });
+        }
+
+        const chapter = await Chapter.create({
+            book_id: bookId,
+            chapter_number: chapterNumber,
+            title: title,
+            content: content
+        });
 
         const totalChapters = await Chapter.countDocuments({ book_id: bookId });
         await Book.findByIdAndUpdate(bookId, { total_chapters: totalChapters });
@@ -198,19 +221,17 @@ exports.addChapter = async (req, res) => {
 exports.getChaptersByStory = async (req, res) => {
     try {
         const { storyId } = req.params;
+        const actualBookId = await resolveBookId(storyId); // Dịch ra _id
+
+        if (!actualBookId) {
+            return res.status(404).json({ success: false, message: 'Khong tim thay truyen' });
+        }
+        
         const page = parsePositiveInt(req.query?.page, 1);
         const limit = Math.min(parsePositiveInt(req.query?.limit, DEFAULT_LIMIT), MAX_LIMIT);
         const skip = (page - 1) * limit;
 
-        const storyFilters = buildStoryOrFilters(storyId);
-        if (storyFilters.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'storyId khong hop le.'
-            });
-        }
-
-        const query = { $or: storyFilters };
+        const query = { book_id: actualBookId }; // Truy vấn chính xác bằng book_id
 
         const [chapters, total] = await Promise.all([
             Chapter.find(query)
@@ -242,32 +263,15 @@ exports.getChapterByStoryAndNumber = async (req, res) => {
     try {
         const { storyId, chapterNumber } = req.params;
         const normalizedChapterNumber = parsePositiveInt(chapterNumber);
+        const actualBookId = await resolveBookId(storyId);
 
-        if (!normalizedChapterNumber) {
-            return res.status(400).json({
-                success: false,
-                message: 'chapterNumber khong hop le.'
-            });
-        }
-
-        const storyFilters = buildStoryOrFilters(storyId);
-        if (storyFilters.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'storyId khong hop le.'
-            });
+        if (!actualBookId) {
+            return res.status(404).json({ success: false, message: 'Khong tim thay truyen' });
         }
 
         const chapter = await Chapter.findOne({
-            $and: [
-                { $or: storyFilters },
-                {
-                    $or: [
-                        { chapter_number: normalizedChapterNumber },
-                        { chapterNumber: normalizedChapterNumber }
-                    ]
-                }
-            ]
+            book_id: actualBookId, // Truy vấn chính xác bằng book_id
+            chapter_number: normalizedChapterNumber
         });
 
         if (!chapter) {
@@ -320,5 +324,92 @@ exports.getChapterDetail = async (req, res) => {
     } catch (error) {
         console.error('Loi getChapterDetail:', error);
         return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// PUT /api/chapters/:id
+exports.updateChapter = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { chapter_number, title, content } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'ID chương không hợp lệ.' });
+        }
+
+        const chapter = await Chapter.findById(id);
+        if (!chapter) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy chương.' });
+        }
+
+        const newChapterNumber = parseFloat(chapter_number);
+        
+        // KIỂM TRA TOÀN VẸN DỮ LIỆU: Nếu đổi số chương, phải đảm bảo số mới chưa bị trùng
+        if (newChapterNumber && newChapterNumber !== chapter.chapter_number) {
+            const isDuplicate = await Chapter.findOne({
+                book_id: chapter.book_id,
+                chapter_number: newChapterNumber
+            });
+            if (isDuplicate) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: `Chương ${newChapterNumber} đã tồn tại trong bộ truyện này. Vui lòng chọn số khác!` 
+                });
+            }
+            chapter.chapter_number = newChapterNumber;
+        }
+
+        if (title !== undefined) chapter.title = title.trim();
+        if (content) chapter.content = content.trim();
+
+        await chapter.save();
+
+        return res.status(200).json({
+            success: true,
+            message: 'Cập nhật chương thành công.',
+            data: normalizeChapter(chapter, chapter.chapter_number)
+        });
+    } catch (error) {
+        console.error('Lỗi API cập nhật chương:', error);
+        return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi cập nhật chương.' });
+    }
+};
+
+// DELETE /api/chapters
+exports.deleteChapters = async (req, res) => {
+    try {
+        const { chapterIds } = req.body; // Mảng chứa các ID chương cần xóa
+
+        if (!Array.isArray(chapterIds) || chapterIds.length === 0) {
+            return res.status(400).json({ success: false, message: 'Không có chương nào được chọn để xóa.' });
+        }
+
+        // 1. Tìm ra các chương này thuộc về cuốn truyện nào (để lát nữa cập nhật lại tổng số chương)
+        const chaptersToDelete = await Chapter.find({ _id: { $in: chapterIds } });
+        if (chaptersToDelete.length === 0) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy các chương này trong Database.' });
+        }
+
+        // Lấy danh sách book_id duy nhất (Thường là chỉ có 1 book_id vì ta đang xóa trong trang EditBook)
+        const bookIdsToUpdate = [...new Set(chaptersToDelete.map(ch => ch.book_id.toString()))];
+
+        // 2. Thực hiện xóa hàng loạt
+        await Chapter.deleteMany({ _id: { $in: chapterIds } });
+
+        // 3. ĐẢM BẢO TOÀN VẸN DỮ LIỆU: Đếm và cập nhật lại biến total_chapters trong bảng Books
+        for (const bId of bookIdsToUpdate) {
+            const remainingCount = await Chapter.countDocuments({ book_id: bId });
+            await Book.findByIdAndUpdate(bId, { total_chapters: remainingCount });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `Đã xóa thành công ${chapterIds.length} chương.`
+        });
+    } catch (error) {
+        console.error('Lỗi API xóa chương:', error);
+        return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi xóa chương.' });
     }
 };

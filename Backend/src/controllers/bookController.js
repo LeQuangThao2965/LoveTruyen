@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
 const Book = require('../models/Book');
+const Chapter = require('../models/Chapter');
 
 const MAX_COVER_SIZE_BYTES = 5 * 1024 * 1024;
 const COVER_UPLOAD_DIR = path.resolve(__dirname, '../../../frontend/public/uploaded_covers');
@@ -17,6 +18,16 @@ const MIME_TO_EXTENSION = {
     'image/webp': 'webp',
     'image/gif': 'gif',
     'image/bmp': 'bmp'
+};
+
+const generateSlug = (text) => {
+    return text.toString().toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Xóa dấu tiếng Việt
+        .replace(/[đĐ]/g, 'd')
+        .replace(/[^a-z0-9\s-]/g, '') // Xóa ký tự đặc biệt
+        .replace(/\s+/g, '-') // Biến khoảng trắng thành gạch nối
+        .replace(/-+/g, '-') // Xóa gạch nối thừa
+        .trim();
 };
 
 const sanitizeFileName = (value = '') => {
@@ -184,16 +195,19 @@ exports.getHotBooksWeekly = async (req, res) => {
     }
 };
 
-// GET /api/books/:id
+// GET /api/books/:idOrSlug
 exports.getBookById = async (req, res) => {
     try {
         const { id } = req.params;
+        let book;
 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return res.status(400).json({ error: 'Book id khong hop le.' });
+        // Kiểm tra xem Param truyền vào là _id (24 ký tự) hay là slug (tên chữ)
+        if (mongoose.Types.ObjectId.isValid(id)) {
+            book = await Book.findById(id);
+        } else {
+            book = await Book.findOne({ slug: id }); // Tìm bằng slug
         }
 
-        const book = await Book.findById(id);
         if (!book) {
             return res.status(404).json({ error: 'Khong tim thay truyen.' });
         }
@@ -201,9 +215,7 @@ exports.getBookById = async (req, res) => {
         return res.status(200).json({ book });
     } catch (error) {
         console.error('Loi API lay chi tiet truyen:', error);
-        return res.status(500).json({
-            error: 'Khong the lay chi tiet truyen. Vui long thu lai.'
-        });
+        return res.status(500).json({ error: 'Khong the lay chi tiet truyen.' });
     }
 };
 
@@ -278,20 +290,27 @@ exports.createBook = async (req, res) => {
             });
         }
 
+        // Tạo slug, thêm vài mã số random ở cuối để tránh bị trùng lặp nếu 2 truyện trùng tên
+        const baseSlug = generateSlug(normalizedTitle);
+        const uniqueSlug = `${baseSlug}-${Math.floor(Math.random() * 10000)}`;
+
         const newBook = new Book({
             title: normalizedTitle,
+            slug: uniqueSlug, // <--- THÊM DÒNG NÀY VÀO DB
             author: normalizedAuthor,
             description: normalizedDescription,
             cover_url: normalizedCoverUrl,
             uploader_id: normalizedUploaderId
         });
-
+        /////////////////////////////////////////////////////////////////////////////////////
         const savedBook = await newBook.save();
 
         return res.status(201).json({
             message: 'Dang truyen thanh cong!',
             book: savedBook
         });
+
+
     } catch (error) {
         console.error('Loi API dang truyen:', error);
         return res.status(500).json({
@@ -583,5 +602,73 @@ exports.getBooksAdvancedSearch = async (req, res) => {
         return res.status(500).json({
             error: 'Không thể thực hiện tìm kiếm nâng cao. Vui lòng thử lại.'
         });
+    }
+};
+//////////////////////////////////////////////////////////////////////////
+// PUT /api/books/:id
+exports.updateBook = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { title, author, description, cover_url, status, genres } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'ID truyện không hợp lệ.' });
+        }
+
+        const book = await Book.findById(id);
+        if (!book) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy truyện.' });
+        }
+
+        // Cập nhật các trường dữ liệu
+        if (title) book.title = title.trim();
+        if (author) book.author = author.trim();
+        if (description !== undefined) book.description = description.trim();
+        if (cover_url !== undefined) book.cover_url = cover_url.trim();
+        if (status) book.status = status;
+        if (Array.isArray(genres)) book.genres = genres;
+
+        // Lưu ý: Không tự động đổi Slug khi đổi Tên truyện để tránh lỗi 404 cho các link đã share (Chuẩn SEO)
+
+        const updatedBook = await book.save();
+
+        return res.status(200).json({
+            success: true,
+            message: 'Cập nhật thông tin truyện thành công.',
+            book: updatedBook
+        });
+    } catch (error) {
+        console.error('Lỗi API cập nhật truyện:', error);
+        return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi cập nhật truyện.' });
+    }
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+// DELETE /api/books/:id
+exports.deleteBook = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ error: 'ID truyện không hợp lệ.' });
+        }
+
+        const book = await Book.findById(id);
+        if (!book) {
+            return res.status(404).json({ error: 'Không tìm thấy truyện.' });
+        }
+
+        // BẢO ĐẢM TOÀN VẸN DỮ LIỆU: Xóa toàn bộ chương liên quan TRƯỚC
+        await Chapter.deleteMany({ book_id: id });
+
+        // Sau khi đã dọn sạch chương, tiến hành xóa truyện
+        await Book.findByIdAndDelete(id);
+
+        return res.status(200).json({ 
+            message: 'Đã xóa truyện và toàn bộ chương liên quan thành công.' 
+        });
+    } catch (error) {
+        console.error('Lỗi API xóa truyện:', error);
+        return res.status(500).json({ error: 'Lỗi máy chủ khi xóa truyện.' });
     }
 };

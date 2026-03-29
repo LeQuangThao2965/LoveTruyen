@@ -201,7 +201,7 @@ const BookDetail = () => {
                                             </td>
                                             <td className="px-4 py-3 text-right">
                                                 <Link
-                                                    to={`/truyen/${bookId}/chuong/${chapter.chapter_number}`}
+                                                    to={`/truyen/${book.slug || book._id}/chuong/${chapter.chapter_number}`}
                                                     className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700"
                                                 >
                                                     Đọc

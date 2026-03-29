@@ -12,6 +12,7 @@ import ReadChapter from './pages/Books/ReadChapter';
 import UserProfile from './pages/UserSettings/UserProfile';
 import Search from './pages/Search/Search';
 import SearchAdvanced from './pages/Search/SearchAdvanced';
+import EditBook from './pages/HostCT/EditBook'; // Import trang chỉnh sửa truyện & chương
 
 const shouldHideMainHeader = (pathname = '') =>
   /^\/truyen\/[^/]+\/chuong\/\d+$/.test(pathname);
@@ -33,6 +34,15 @@ const AppLayout = () => {
           {/* Search Routes */}
           <Route path="/search" element={<Search />} />
           <Route path="/search-advanced" element={<SearchAdvanced />} />
+
+          <Route
+              path="/host/edit-book/:bookId"
+              element={
+                  <ProtectedRoute allowedRoles={['host', 'admin']}>
+                      <EditBook />
+                  </ProtectedRoute>
+              }
+          />
 
           <Route
             path="/profile"

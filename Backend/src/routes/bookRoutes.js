@@ -7,8 +7,11 @@ const {
     createBook,
     uploadBookCover,
     getBookSuggestions,
-    getBooksAdvancedSearch
+    getBooksAdvancedSearch,
+    deleteBook
 } = require('../controllers/bookController');
+
+const bookController = require('../controllers/bookController');
 
 // Danh sach truyen (co kem 2 chapter moi nhat cho moi truyen)
 router.get('/', getBooks);
@@ -30,5 +33,10 @@ router.get('/:id', getBookById);
 
 // Tao truyen moi
 router.post('/', createBook);
+
+// Khai báo route sửa truyện
+router.put('/:id', bookController.updateBook); 
+
+router.delete('/:id', deleteBook);
 
 module.exports = router;

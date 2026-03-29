@@ -55,6 +55,10 @@ const bookSchema = new mongoose.Schema({
     weekly_views_start: {
         type: Date,
         default: null
+    },
+    slug: {
+        type: String,
+        unique: true, // Đảm bảo không có 2 truyện trùng URL
     }
 }, {
     timestamps: true
