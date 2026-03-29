@@ -1,7 +1,7 @@
 // Backend/src/middlewares/adminMiddleware.js
 const UserProfile = require('../models/UserProfile');
 
-// Middleware kiểm tra role admin hoặc moderator
+// Middleware kiểm tra role admin hoặc host
 const requireAdmin = async (req, res, next) => {
     try {
         if (!req.user) {
@@ -27,9 +27,9 @@ const requireAdmin = async (req, res, next) => {
             });
         }
 
-        if (!['admin', 'moderator'].includes(profile.role)) {
+        if (!['admin', 'host'].includes(profile.role)) {
             return res.status(403).json({ 
-                message: 'Không có quyền truy cập! Yêu cầu quyền Admin hoặc Moderator.',
+                message: 'Không có quyền truy cập! Yêu cầu quyền Admin hoặc Host.',
                 currentRole: profile.role 
             });
         }
@@ -42,7 +42,7 @@ const requireAdmin = async (req, res, next) => {
     }
 };
 
-// Middleware chỉ cho phép admin (không cho moderator)
+// Middleware chỉ cho phép admin (không cho host)
 const requireSuperAdmin = async (req, res, next) => {
     try {
         if (!req.user) {

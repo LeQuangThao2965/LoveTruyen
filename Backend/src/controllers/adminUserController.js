@@ -1,9 +1,57 @@
 // Backend/src/controllers/adminUserController.js
-// Các hàm quản lý user dành cho Admin/Moderator
+// Các hàm quản lý user dành cho Admin/Host
 
 const UserProfile = require('../models/UserProfile');
 const User = require('../models/user');
 const AuditLog = require('../models/AuditLog');
+
+// =========================================================================
+// 🚀 HÀM TRỢ THỦ: TỰ ĐỘNG TẠO USER NẾU CHƯA TỒN TẠI TRONG MONGODB
+// Giúp diệt tận gốc lỗi 404 khi Admin thao tác trên User chưa từng đăng nhập
+// =========================================================================
+const getOrCreateMongoUser = async (supabaseId) => {
+    let targetUser = await UserProfile.findOne({ supabaseId });
+    if (targetUser) return targetUser;
+
+    console.log(`[Helper] User ${supabaseId} chưa có trong MongoDB. Tiến hành tạo mới...`);
+    const supabase = require('../configs/supabase');
+    const { data: supabaseUser, error } = await supabase
+        .from('profiles')
+        .select('id, email, username')
+        .eq('id', supabaseId)
+        .single();
+
+    if (error || !supabaseUser) {
+        console.log(`[Helper] Không tìm thấy user trong Supabase!`);
+        return null;
+    }
+
+    // 1. Tạo profile mới và lưu vào DB
+    targetUser = new UserProfile({
+        supabaseId: supabaseId,
+        email: supabaseUser.email,
+        username: supabaseUser.username || supabaseUser.email?.split('@')[0],
+        role: 'user',
+        status: 'active',
+        coins: 0
+    });
+    await targetUser.save();
+
+    // 2. Tạo luôn record trong bảng User cho đồng bộ
+    const existUser = await User.findOne({ supabaseId });
+    if (!existUser) {
+        await User.create({
+            supabaseId: supabaseId,
+            email: supabaseUser.email,
+            library: [],
+            history: []
+        });
+    }
+
+    return targetUser;
+};
+// =========================================================================
+
 
 // 1. getUsers - Lấy danh sách user từ Supabase (hiển thị), merge role từ MongoDB
 // GET /api/users?page=1&limit=10&search=abc&role=admin&status=active
@@ -12,17 +60,14 @@ exports.getUsers = async (req, res) => {
         const { page = 1, limit = 10, search, role, status } = req.query;
         const supabase = require('../configs/supabase');
         
-        // Lấy từ Supabase public.profiles (dùng anon key, không cần Service Role Key)
         let supabaseQuery = supabase
             .from('profiles')
             .select('*', { count: 'exact' });
         
-        // Search theo username hoặc email
         if (search) {
             supabaseQuery = supabaseQuery.or(`username.ilike.%${search}%,email.ilike.%${search}%`);
         }
         
-        // Pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
         supabaseQuery = supabaseQuery
             .order('created_at', { ascending: false })
@@ -35,13 +80,11 @@ exports.getUsers = async (req, res) => {
             return res.status(500).json({ message: 'Lỗi lấy dữ liệu từ Supabase' });
         }
         
-        // Lấy role từ MongoDB (nếu có)
         const supabaseIds = profiles.map(p => p.id);
         const mongoProfiles = await UserProfile.find({ 
             supabaseId: { $in: supabaseIds } 
         }).select('supabaseId role status coins isMuted');
         
-        // Merge data: Supabase (gmail, avatar) + MongoDB (role, status)
         let mergedUsers = profiles.map(profile => {
             const mongoData = mongoProfiles.find(mp => mp.supabaseId === profile.id);
             return {
@@ -58,7 +101,6 @@ exports.getUsers = async (req, res) => {
             };
         });
         
-        // Filter theo role và status sau khi merge
         if (role) {
             mergedUsers = mergedUsers.filter(u => u.role === role);
         }
@@ -84,12 +126,10 @@ exports.getUsers = async (req, res) => {
 };
 
 // 2. getUserDetails - Xem chi tiết 1 user
-// GET /api/users/:id/details
 exports.getUserDetails = async (req, res) => {
     try {
         const { id } = req.params;
-        
-        const userProfile = await UserProfile.findOne({ supabaseId: id }).select('-validTokens');
+        const userProfile = await getOrCreateMongoUser(id);
         
         if (!userProfile) {
             return res.status(404).json({ message: 'Không tìm thấy user' });
@@ -114,17 +154,13 @@ exports.getUserDetails = async (req, res) => {
 };
 
 // 3. changeUserRole - Đổi quyền user trong MongoDB
-// PATCH /api/users/:id/role
 exports.changeUserRole = async (req, res) => {
     try {
         const { id } = req.params;
         const { role } = req.body;
         const supabase = require('../configs/supabase');
         
-        console.log(`\n========== [changeUserRole] START ==========`);
-        console.log(`[changeUserRole] Target: ${id}, New role: ${role}`);
-        
-        if (!['user', 'moderator', 'admin'].includes(role)) {
+        if (!['user', 'host', 'admin'].includes(role)) {
             return res.status(400).json({ message: 'Role không hợp lệ' });
         }
         
@@ -133,7 +169,7 @@ exports.changeUserRole = async (req, res) => {
         }
         
         if (role === 'admin') {
-            return res.status(403).json({ message: 'Bạn không có quyền cấp quyền Admin. Chỉ có thể chuyển đổi giữa User và Moderator!' });
+            return res.status(403).json({ message: 'Bạn không có quyền cấp quyền Admin. Chỉ có thể chuyển đổi giữa User và Host!' });
         }
         
         const { data: supabaseUser, error: supabaseError } = await supabase
@@ -166,9 +202,6 @@ exports.changeUserRole = async (req, res) => {
             { upsert: true, new: true }
         );
         
-        console.log(`[changeUserRole] SUCCESS: ${previousRole} → ${role}`);
-        console.log(`========== [changeUserRole] END ==========\n`);
-        
         await AuditLog.create({
             adminId: req.user.id,
             adminRole: req.userProfile.role,
@@ -192,34 +225,22 @@ exports.changeUserRole = async (req, res) => {
 };
 
 // 4. banUser - Khóa tài khoản
-// POST /api/users/:id/ban
 exports.banUser = async (req, res) => {
     try {
         const { id } = req.params;
         const { reason } = req.body;
         
-        if (!reason) {
-            return res.status(400).json({ message: 'Vui lòng nhập lý do khóa tài khoản' });
-        }
+        if (!reason) return res.status(400).json({ message: 'Vui lòng nhập lý do khóa tài khoản' });
+        if (id === req.user.id) return res.status(400).json({ message: 'Bạn không thể tự khóa tài khoản của chính mình!' });
         
-        // 🚫 CẤM TỰ BAN: Không thể tự khóa chính mình
-        if (id === req.user.id) {
-            return res.status(400).json({ message: 'Bạn không thể tự khóa tài khoản của chính mình!' });
-        }
+        const targetUser = await getOrCreateMongoUser(id);
+        if (!targetUser) return res.status(404).json({ message: 'Không tìm thấy user' });
         
-        const targetUser = await UserProfile.findOne({ supabaseId: id });
-        
-        if (!targetUser) {
-            return res.status(404).json({ message: 'Không tìm thấy user' });
-        }
-        
-        // 🛡️ CẤM ADMIN BAN ADMIN: Không thể khóa tài khoản Admin khác
         if (targetUser.role === 'admin') {
             return res.status(403).json({ message: 'Không thể khóa tài khoản của một Admin khác!' });
         }
         
         const previousStatus = targetUser.status;
-        
         targetUser.status = 'banned';
         targetUser.banReason = reason;
         targetUser.bannedAt = new Date();
@@ -247,19 +268,14 @@ exports.banUser = async (req, res) => {
 };
 
 // 5. unbanUser - Mở khóa tài khoản
-// POST /api/users/:id/unban
 exports.unbanUser = async (req, res) => {
     try {
         const { id } = req.params;
         
-        const targetUser = await UserProfile.findOne({ supabaseId: id });
-        
-        if (!targetUser) {
-            return res.status(404).json({ message: 'Không tìm thấy user' });
-        }
+        const targetUser = await getOrCreateMongoUser(id);
+        if (!targetUser) return res.status(404).json({ message: 'Không tìm thấy user' });
         
         const previousStatus = targetUser.status;
-        
         targetUser.status = 'active';
         targetUser.banReason = null;
         targetUser.bannedAt = null;
@@ -286,39 +302,27 @@ exports.unbanUser = async (req, res) => {
 };
 
 // 6. toggleBanUser - Toggle trạng thái khóa/mở khóa
-// POST /api/users/:id/toggle-ban
 exports.toggleBanUser = async (req, res) => {
     try {
         const { id } = req.params;
         const { reason } = req.body;
         const adminId = req.user.id;
         
-        console.log(`\n========== [toggleBanUser] START ==========`);
-        console.log(`[toggleBanUser] Target: ${id}, Admin: ${adminId}`);
-        
-        // 🚫 CẤM TỰ BAN: Không thể tự khóa chính mình
         if (id === adminId) {
-            console.log(`[toggleBanUser] ERROR: Self-ban attempt blocked`);
             return res.status(400).json({ message: 'Bạn không thể tự khóa tài khoản của chính mình!' });
         }
         
-        const targetUser = await UserProfile.findOne({ supabaseId: id });
-        
-        if (!targetUser) {
-            return res.status(404).json({ message: 'Không tìm thấy user' });
-        }
+        const targetUser = await getOrCreateMongoUser(id);
+        if (!targetUser) return res.status(404).json({ message: 'Không tìm thấy user' });
         
         const previousStatus = targetUser.status;
         const isCurrentlyBanned = targetUser.status === 'banned';
         
-        // 🛡️ CẤM ADMIN BAN ADMIN: Chỉ kiểm tra khi đang BAN (không kiểm tra khi UNBAN)
         if (!isCurrentlyBanned && targetUser.role === 'admin') {
-            console.log(`[toggleBanUser] ERROR: Cannot ban another admin`);
             return res.status(403).json({ message: 'Không thể khóa tài khoản của một Admin khác!' });
         }
         
         if (isCurrentlyBanned) {
-            // UNBAN
             targetUser.status = 'active';
             targetUser.banReason = null;
             targetUser.bannedAt = null;
@@ -337,9 +341,6 @@ exports.toggleBanUser = async (req, res) => {
                 newValue: { status: 'active' }
             });
             
-            console.log(`[toggleBanUser] UNBAN SUCCESS`);
-            console.log(`========== [toggleBanUser] END ==========\n`);
-            
             res.json({ 
                 success: true, 
                 message: 'Đã mở khóa tài khoản',
@@ -347,10 +348,7 @@ exports.toggleBanUser = async (req, res) => {
                 user: { supabaseId: id, status: 'active' }
             });
         } else {
-            // BAN
-            if (!reason) {
-                return res.status(400).json({ message: 'Vui lòng nhập lý do khóa tài khoản' });
-            }
+            if (!reason) return res.status(400).json({ message: 'Vui lòng nhập lý do khóa tài khoản' });
             
             targetUser.status = 'banned';
             targetUser.banReason = reason;
@@ -371,9 +369,6 @@ exports.toggleBanUser = async (req, res) => {
                 newValue: { status: 'banned', banReason: reason }
             });
             
-            console.log(`[toggleBanUser] BAN SUCCESS`);
-            console.log(`========== [toggleBanUser] END ==========\n`);
-            
             res.json({ 
                 success: true, 
                 message: 'Đã khóa tài khoản',
@@ -388,38 +383,22 @@ exports.toggleBanUser = async (req, res) => {
 };
 
 // 7. muteUser - Cấm chat/bình luận có Thời hạn
-// POST /api/users/:id/mute
-// Body: { reason: string, duration: number (phút) }
 exports.muteUser = async (req, res) => {
     try {
         const { id } = req.params;
         const { reason, duration } = req.body;
         
-        if (!reason) {
-            return res.status(400).json({ message: 'Vui lòng nhập lý do cấm chat' });
-        }
+        if (!reason) return res.status(400).json({ message: 'Vui lòng nhập lý do cấm chat' });
+        if (!duration || duration <= 0) return res.status(400).json({ message: 'Vui lòng nhập Thời gian cấm chat hợp lệ (phút)' });
+        if (id === req.user.id) return res.status(400).json({ message: 'Bạn không thể tự cấm chat chính mình!' });
         
-        if (!duration || duration <= 0) {
-            return res.status(400).json({ message: 'Vui lòng nhập Thời gian cấm chat hợp lệ (phút)' });
-        }
+        const targetUser = await getOrCreateMongoUser(id);
+        if (!targetUser) return res.status(404).json({ message: 'Không tìm thấy user' });
         
-        // 🚫 CẤM TỰ KHÓA MIỆNG: Không thể tự cấm chat chính mình
-        if (id === req.user.id) {
-            return res.status(400).json({ message: 'Bạn không thể tự cấm chat chính mình!' });
-        }
-        
-        const targetUser = await UserProfile.findOne({ supabaseId: id });
-        
-        if (!targetUser) {
-            return res.status(404).json({ message: 'Không tìm thấy user' });
-        }
-        
-        // 🛡️ BẢO VỆ ADMIN: Không thể cấm chat Admin khác
         if (targetUser.role === 'admin') {
             return res.status(403).json({ message: 'Không thể cấm chat của một Admin khác!' });
         }
         
-        // Tính toán Thời gian kết thúc
         const muteUntil = new Date(Date.now() + duration * 60 * 1000);
         
         targetUser.isMuted = true;
@@ -457,22 +436,18 @@ exports.muteUser = async (req, res) => {
 };
 
 // 8. unmuteUser - Bỏ cấm chat (xóa án phạt trước Thời hạn)
-// POST /api/users/:id/unmute
 exports.unmuteUser = async (req, res) => {
     try {
         const { id } = req.params;
         
-        const targetUser = await UserProfile.findOne({ supabaseId: id });
-        
-        if (!targetUser) {
-            return res.status(404).json({ message: 'Không tìm thấy user' });
-        }
+        const targetUser = await getOrCreateMongoUser(id);
+        if (!targetUser) return res.status(404).json({ message: 'Không tìm thấy user' });
         
         targetUser.isMuted = false;
         targetUser.muteReason = null;
         targetUser.mutedAt = null;
         targetUser.mutedBy = null;
-        targetUser.muteUntil = null; // Xóa Thời hạn
+        targetUser.muteUntil = null;
         
         await targetUser.save();
         
@@ -495,7 +470,6 @@ exports.unmuteUser = async (req, res) => {
 };
 
 // 9. getAuditLogs - Lấy lịch sử thao tác
-// GET /api/users/audit-logs
 exports.getAuditLogs = async (req, res) => {
     try {
         const { page = 1, limit = 20 } = req.query;
@@ -524,4 +498,3 @@ exports.getAuditLogs = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
-1343

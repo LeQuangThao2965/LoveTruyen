@@ -2,7 +2,7 @@ import { FaUser, FaUserEdit, FaBan, FaUnlock, FaCommentSlash, FaComment, FaEye }
 
 const ROLE_COLORS = {
     admin: 'bg-red-100 text-red-800 border-red-200',
-    moderator: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    host: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     user: 'bg-blue-100 text-blue-800 border-blue-200'
 };
 
@@ -123,11 +123,11 @@ const UserTable = ({ users, loading, onViewDetails, onBan, onUnban, onToggleBan,
                                     </td>
                                     <td className="px-4 py-3">
                                         <span className={`px-2 py-1 rounded-full text-xs font-medium border ${ROLE_COLORS[user.role] || ROLE_COLORS.user}`}>
-                                            {user.role === 'admin' ? 'Admin' : user.role === 'moderator' ? 'Moderator' : 'User'}
+                                            {user.role === 'admin' ? 'Admin' : user.role === 'host' ? 'Host' : 'User'}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3">
-                                        <div className="flex flex-col gap-1">
+                                        <div className="flex flex-col items-start gap-1">
                                             <span className={`px-2 py-1 rounded-full text-xs font-medium border ${STATUS_COLORS[user.status] || STATUS_COLORS.active}`}>
                                                 {user.status === 'banned' ? 'Bị khóa' : 'Hoạt động'}
                                             </span>

@@ -3,7 +3,7 @@ import { Modal } from './ConfirmModal';
 
 const ROLE_COLORS = {
     admin: 'bg-red-100 text-red-800 border-red-200',
-    moderator: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    host: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     user: 'bg-blue-100 text-blue-800 border-blue-200'
 };
 
@@ -59,7 +59,7 @@ const LoadingSpinner = ({ size = 'md' }) => {
 const getRoleLabel = (role) => {
     switch (role) {
         case 'admin': return 'Admin';
-        case 'moderator': return 'Moderator';
+        case 'host': return 'Host';
         default: return 'User';
     }
 };

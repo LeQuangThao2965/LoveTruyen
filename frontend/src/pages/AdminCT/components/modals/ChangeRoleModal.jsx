@@ -33,7 +33,7 @@ const UserAvatar = ({ src, alt, size = 'md' }) => {
 const getRoleLabel = (role) => {
     switch (role) {
         case 'admin': return 'Admin';
-        case 'moderator': return 'Moderator';
+        case 'host': return 'Host';
         default: return 'User';
     }
 };
@@ -62,15 +62,15 @@ const ChangeRoleModal = ({ isOpen, user, currentRole, onClose, onConfirm, onRole
                         onChange={(e) => onRoleChange(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none appearance-none bg-white transition-colors"
                     >
-                        {/* 🚫 Chỉ cho phép chuyển đổi giữa User và Moderator */}
+                        {/* 🚫 Chỉ cho phép chuyển đổi giữa User và Host */}
                         {/* Admin không thể tự phong hoặc phong ngưởi khác thành Admin */}
                         <option value="user">User</option>
-                        <option value="moderator">Moderator</option>
+                        <option value="host">Host</option>
                     </select>
                 </div>
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-sm text-blue-800">
-                        ℹ️ Lưu ý: Chỉ có thể chuyển đổi giữa User và Moderator. 
+                        ℹ️ Lưu ý: Chỉ có thể chuyển đổi giữa User và Host. 
                         Không thể phong quyền Admin qua giao diện này.
                     </p>
                 </div>

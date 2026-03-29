@@ -120,17 +120,7 @@ const Header = () => {
         };
     }, []);
 
-    // 🚀 Gọi API kiểm tra profile khi user đăng nhập (để phát hiện bị ban)
-    useEffect(() => {
-        if (user) {
-            // Gọi API để kiểm tra trạng thái user
-            // Nếu user bị ban, axios interceptor sẽ xử lý 403 và hiện toast
-            api.get('/users/me/profile').catch((error) => {
-                // Lỗi đã được xử lý bởi axios interceptor
-                console.log('[Header] Profile check result:', error.response?.status || 'success');
-            });
-        }
-    }, [user]);
+
 
     useEffect(() => {
         if (isSearchOpen && searchInputRef.current) {
@@ -151,29 +141,38 @@ const Header = () => {
         };
     }, []);
 
-    // Xử lý Lấy Role từ MongoDB (thay vì từ Supabase)
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // ✅ GỘP 2 USEEFFECT LẠI THÀNH 1 VÀ DÙNG [user?.id] ĐỂ CHỐNG LẶP
     useEffect(() => {
-        const fetchRoleFromMongoDB = async () => {
-            if (user?.id) {
-                try {
-                    // Gọi API lấy profile từ MongoDB
-                    const response = await api.get('/users/me/profile');
-                    const profile = response.profile;
-                    
-                    // Cập nhật role từ MongoDB
-                    if (profile?.role) {
-                        setUserRole(profile.role);
-                    }
-                } catch (err) {
-                    console.error('Failed to fetch profile from MongoDB:', err);
-                    setUserRole('user');
-                }
-            } else {
+        const fetchProfileData = async () => {
+            // Nếu chưa đăng nhập (không có ID) thì set Role mặc định và dừng lại
+            if (!user?.id) {
                 setUserRole('user');
+                return;
+            }
+
+            try {
+                // Gọi API lấy profile TỪ MONGODB (Đúng 1 lần duy nhất)
+                const response = await api.get('/users/me/profile');
+                
+                // Lưu ý: response từ axios thường nằm trong data, 
+                // nhưng tùy config interceptor của bạn mà nó có thể trả thẳng ra json
+                const profile = response?.profile || response?.data?.profile;
+                
+                // Cập nhật role
+                if (profile?.role) {
+                    setUserRole(profile.role);
+                }
+            } catch (err) {
+                console.error('[Header] Failed to fetch profile from MongoDB:', err);
+                setUserRole('user');
+                // Lỗi 403 (Banned) đã được Axios Interceptor bắt và xử lý tự động rồi, không cần lo.
             }
         };
-        fetchRoleFromMongoDB();
-    }, [user?.id]); // Chỉ chạy khi ID user thay đổi
+
+        fetchProfileData();
+    }, [user?.id]); // 🔒 BẢO MẬT: Chỉ chạy khi ID của user bị thay đổi (từ null sang có id, hoặc đăng nhập nick khác)
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
@@ -331,8 +330,6 @@ const Header = () => {
                 return 'bg-red-100 text-red-700 border-red-200';
             case 'host':
                 return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-            case 'moderator':
-                return 'bg-purple-100 text-purple-700 border-purple-200';
             default:
                 return 'bg-gray-100 text-gray-700 border-gray-200';
         }

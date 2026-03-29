@@ -17,8 +17,8 @@ async function changeUserRole() {
         process.exit(1);
     }
     
-    if (!['user', 'moderator', 'admin'].includes(newRole)) {
-        console.log('Error: Role phải là user, moderator, hoặc admin');
+    if (!['user', 'host', 'admin'].includes(newRole)) {
+        console.log('Error: Role phải là user, host, hoặc admin');
         process.exit(1);
     }
     

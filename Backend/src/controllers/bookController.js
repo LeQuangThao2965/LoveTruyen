@@ -392,6 +392,9 @@ exports.getHostStats = async (req, res) => {
     } catch (error) {
         console.error('Loi API host stats:', error);
         return res.status(500).json({ error: 'Khong the lay thong ke. Vui long thu lai.' });
+    }
+}
+
 // GET /api/books/suggestions?q=<keyword>
 exports.getBookSuggestions = async (req, res) => {
     try {

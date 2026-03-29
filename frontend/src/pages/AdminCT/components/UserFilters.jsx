@@ -3,7 +3,7 @@ import { FaSearch, FaFilter } from 'react-icons/fa';
 const ROLE_OPTIONS = [
     { value: '', label: 'Tất cả' },
     { value: 'user', label: 'User' },
-    { value: 'moderator', label: 'Moderator' },
+    { value: 'host', label: 'Host' },
     { value: 'admin', label: 'Admin' }
 ];
 

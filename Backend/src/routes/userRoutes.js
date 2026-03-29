@@ -26,7 +26,7 @@ router.get('/:id/details', adminUserController.getUserDetails);
 // Chỉ admin mới được đổi role (super admin)
 router.patch('/:id/role', requireSuperAdmin, adminUserController.changeUserRole);
 
-// Admin và moderator đều được ban/unban/mute/unmute
+// Admin và host đều được ban/unban/mute/unmute
 router.post('/:id/ban', adminUserController.banUser);
 router.post('/:id/unban', adminUserController.unbanUser);
 router.post('/:id/toggle-ban', adminUserController.toggleBanUser);
