@@ -319,6 +319,79 @@ exports.createBook = async (req, res) => {
     }
 };
 
+// GET /api/books/host-stats?uploader_id=<id>&all=true
+// Tra ve thong ke tong quan cho Host/Admin.
+// - uploader_id: loc theo nguoi dang (host)
+// - all=true: admin xem thong ke toan bo he thong
+exports.getHostStats = async (req, res) => {
+    try {
+        const { uploader_id, all } = req.query;
+        const showAll = all === 'true';
+
+        if (!showAll && (!uploader_id || typeof uploader_id !== 'string' || !uploader_id.trim())) {
+            return res.status(400).json({ error: 'Thieu uploader_id.' });
+        }
+
+        const weekStart = getWeekStart();
+        const matchStage = showAll ? {} : { uploader_id: uploader_id.trim() };
+        const findFilter = showAll ? {} : { uploader_id: uploader_id.trim() };
+
+        const [aggregateResult, topBooks] = await Promise.all([
+            Book.aggregate([
+                { $match: matchStage },
+                {
+                    $group: {
+                        _id: null,
+                        totalBooks: { $sum: 1 },
+                        totalViews: { $sum: { $ifNull: ['$total_views', 0] } },
+                        totalChapters: { $sum: { $ifNull: ['$total_chapters', 0] } },
+                        weeklyViews: {
+                            $sum: {
+                                $cond: [
+                                    { $eq: ['$weekly_views_start', weekStart] },
+                                    { $ifNull: ['$weekly_views', 0] },
+                                    0
+                                ]
+                            }
+                        },
+                        statusList: { $push: { $ifNull: ['$status', 'Đang cập nhật'] } }
+                    }
+                }
+            ]),
+            Book.find(
+                findFilter,
+                { title: 1, cover_url: 1, total_views: 1, total_chapters: 1, status: 1 }
+            )
+                .sort({ total_views: -1 })
+                .limit(5)
+                .lean()
+        ]);
+
+        const stats = aggregateResult[0] ?? {
+            totalBooks: 0,
+            totalViews: 0,
+            totalChapters: 0,
+            weeklyViews: 0,
+            statusList: []
+        };
+
+        // Dem so truyen theo trang thai
+        const booksByStatus = stats.statusList.reduce((acc, status) => {
+            acc[status] = (acc[status] || 0) + 1;
+            return acc;
+        }, {});
+
+        return res.status(200).json({
+            totalBooks: stats.totalBooks,
+            totalViews: stats.totalViews,
+            weeklyViews: stats.weeklyViews,
+            totalChapters: stats.totalChapters,
+            booksByStatus,
+            topBooks
+        });
+    } catch (error) {
+        console.error('Loi API host stats:', error);
+        return res.status(500).json({ error: 'Khong the lay thong ke. Vui long thu lai.' });
 // GET /api/books/suggestions?q=<keyword>
 exports.getBookSuggestions = async (req, res) => {
     try {

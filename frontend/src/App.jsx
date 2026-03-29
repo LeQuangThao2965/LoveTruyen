@@ -1,4 +1,4 @@
-﻿import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -8,6 +8,7 @@ import CrawlBooks from './pages/AdminCT/CrawlBooks';
 import UsersManage from './pages/AdminCT/UsersManage';
 import HomePage from './pages/Home/HomePage';
 import ManageBooks from './pages/HostCT/MyBooks';
+import HostStats from './pages/HostCT/HostStats';
 import BookDetail from './pages/Books/BookDetail';
 import ReadChapter from './pages/Books/ReadChapter';
 import UserProfile from './pages/UserSettings/UserProfile';
@@ -59,6 +60,15 @@ const AppLayout = () => {
             element={
               <ProtectedRoute allowedRoles={['host', 'admin']}>
                 <ManageBooks />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/host/stats"
+            element={
+              <ProtectedRoute allowedRoles={['host', 'admin']}>
+                <HostStats />
               </ProtectedRoute>
             }
           />
