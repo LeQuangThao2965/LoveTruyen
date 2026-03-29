@@ -12,6 +12,7 @@ const storyRoutes = require('./src/routes/storyRoutes');
 const chapterRoutes = require('./src/routes/chapterRoutes');
 const bookRoutes = require('./src/routes/bookRoutes');
 const crawlerRoutes = require('./src/routes/crawlerRoutes');
+const userRoutes = require('./src/routes/userRoutes');
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ app.use('/api/stories', storyRoutes);
 app.use('/api/chapters', chapterRoutes);
 app.use('/api/books', bookRoutes);
 app.use('/api/crawler', crawlerRoutes);
+app.use('/api/users', userRoutes);
 
 // Bat cron crawl metadata (title + cover) theo lich 00:00 va 12:00.
 startCrawlerCron();
