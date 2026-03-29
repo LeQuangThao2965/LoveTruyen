@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
 const Book = require('../models/Book');
+const Chapter = require('../models/Chapter');
 
 const MAX_COVER_SIZE_BYTES = 5 * 1024 * 1024;
 const COVER_UPLOAD_DIR = path.resolve(__dirname, '../../../frontend/public/uploaded_covers');
@@ -17,6 +18,16 @@ const MIME_TO_EXTENSION = {
     'image/webp': 'webp',
     'image/gif': 'gif',
     'image/bmp': 'bmp'
+};
+
+const generateSlug = (text) => {
+    return text.toString().toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Xóa dấu tiếng Việt
+        .replace(/[đĐ]/g, 'd')
+        .replace(/[^a-z0-9\s-]/g, '') // Xóa ký tự đặc biệt
+        .replace(/\s+/g, '-') // Biến khoảng trắng thành gạch nối
+        .replace(/-+/g, '-') // Xóa gạch nối thừa
+        .trim();
 };
 
 const sanitizeFileName = (value = '') => {
@@ -184,16 +195,19 @@ exports.getHotBooksWeekly = async (req, res) => {
     }
 };
 
-// GET /api/books/:id
+// GET /api/books/:idOrSlug
 exports.getBookById = async (req, res) => {
     try {
         const { id } = req.params;
+        let book;
 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return res.status(400).json({ error: 'Book id khong hop le.' });
+        // Kiểm tra xem Param truyền vào là _id (24 ký tự) hay là slug (tên chữ)
+        if (mongoose.Types.ObjectId.isValid(id)) {
+            book = await Book.findById(id);
+        } else {
+            book = await Book.findOne({ slug: id }); // Tìm bằng slug
         }
 
-        const book = await Book.findById(id);
         if (!book) {
             return res.status(404).json({ error: 'Khong tim thay truyen.' });
         }
@@ -201,9 +215,7 @@ exports.getBookById = async (req, res) => {
         return res.status(200).json({ book });
     } catch (error) {
         console.error('Loi API lay chi tiet truyen:', error);
-        return res.status(500).json({
-            error: 'Khong the lay chi tiet truyen. Vui long thu lai.'
-        });
+        return res.status(500).json({ error: 'Khong the lay chi tiet truyen.' });
     }
 };
 
@@ -278,24 +290,385 @@ exports.createBook = async (req, res) => {
             });
         }
 
+        // Tạo slug, thêm vài mã số random ở cuối để tránh bị trùng lặp nếu 2 truyện trùng tên
+        const baseSlug = generateSlug(normalizedTitle);
+        const uniqueSlug = `${baseSlug}-${Math.floor(Math.random() * 10000)}`;
+
         const newBook = new Book({
             title: normalizedTitle,
+            slug: uniqueSlug, // <--- THÊM DÒNG NÀY VÀO DB
             author: normalizedAuthor,
             description: normalizedDescription,
             cover_url: normalizedCoverUrl,
             uploader_id: normalizedUploaderId
         });
-
+        /////////////////////////////////////////////////////////////////////////////////////
         const savedBook = await newBook.save();
 
         return res.status(201).json({
             message: 'Dang truyen thanh cong!',
             book: savedBook
         });
+
+
     } catch (error) {
         console.error('Loi API dang truyen:', error);
         return res.status(500).json({
             error: 'May chu dang gap su co, vui long thu lai!'
         });
+    }
+};
+
+// GET /api/books/suggestions?q=<keyword>
+exports.getBookSuggestions = async (req, res) => {
+    try {
+        const { q } = req.query;
+        
+        if (!q || typeof q !== 'string' || q.trim().length === 0) {
+            return res.json([]);
+        }
+
+        const keyword = q.trim().toLowerCase();
+        const limit = Math.min(parsePositiveInt(req.query.limit, 8), 12);
+
+        // Tìm kiếm theo title và author với regex case-insensitive
+        const books = await Book.aggregate([
+            {
+                $match: {
+                    $or: [
+                        { title: { $regex: keyword, $options: 'i' } },
+                        { author: { $regex: keyword, $options: 'i' } }
+                    ]
+                }
+            },
+            {
+                $addFields: {
+                    // Tính điểm relevance cho việc sắp xếp
+                    relevanceScore: {
+                        $add: [
+                            { $cond: [{ $regexMatch: { input: { $toLower: '$title' }, regex: keyword } }, 10, 0] },
+                            { $cond: [{ $eq: [{ $toLower: '$title' }, keyword] }, 5, 0] },
+                            { $cond: [{ $regexMatch: { input: { $toLower: '$author' }, regex: keyword } }, 3, 0] },
+                            { $cond: [{ $eq: [{ $toLower: '$author' }, keyword] }, 2, 0] }
+                        ]
+                    }
+                }
+            },
+            { $sort: { relevanceScore: -1, total_views: -1, updatedAt: -1 } },
+            { $limit: limit },
+            {
+                $project: {
+                    _id: 1,
+                    title: 1,
+                    author: 1,
+                    cover_url: 1,
+                    total_views: 1,
+                    relevanceScore: 1
+                }
+            }
+        ]);
+
+        return res.json(books);
+    } catch (error) {
+        console.error('Loi API suggestions:', error);
+        return res.status(500).json({
+            error: 'Khong the lay danh sach gợi ý. Vui long thu lai.'
+        });
+    }
+};
+
+// GET /api/books/search-advanced
+exports.getBooksAdvancedSearch = async (req, res) => {
+    try {
+        const {
+            title,
+            genres,
+            year_start,
+            year_end,
+            status,
+            sort_by = 'relevance',
+            sort_order = 'desc',
+            page = 1,
+            limit = 20
+        } = req.query;
+
+        const safePage = parsePositiveInt(page, DEFAULT_PAGE);
+        const safeLimit = Math.min(parsePositiveInt(limit, DEFAULT_GET_BOOK_LIMIT), MAX_GET_BOOK_LIMIT);
+        const skip = (safePage - 1) * safeLimit;
+
+        // Build match conditions
+        const matchConditions = {};
+
+        // Genres filter (AND condition - phải có tất cả genres được chọn)
+        if (genres && typeof genres === 'string') {
+            const genresArray = genres.split(',').map(g => g.trim()).filter(g => g);
+            if (genresArray.length > 0) {
+                matchConditions.genres = { $all: genresArray };
+            }
+        }
+
+        // Year range filter
+        if (year_start || year_end) {
+            matchConditions.createdAt = {};
+            if (year_start) {
+                const startYear = parsePositiveInt(year_start, 2000);
+                matchConditions.createdAt.$gte = new Date(`${startYear}-01-01T00:00:00.000Z`);
+            }
+            if (year_end) {
+                const endYear = parsePositiveInt(year_end, new Date().getFullYear());
+                matchConditions.createdAt.$lte = new Date(`${endYear}-12-31T23:59:59.999Z`);
+            }
+        }
+
+        // Status filter
+        if (status && typeof status === 'string' && status.trim()) {
+            matchConditions.status = status.trim();
+        }
+
+        // Add relevance scoring for title search
+        let relevanceStage = {};
+        let titleMatchConditions = {};
+        
+        if (title && typeof title === 'string' && title.trim()) {
+            const searchTerm = title.trim();
+            
+            // Tạo search term không dấu
+            const removeDiacritics = (str) => {
+                return str.normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .replace(/[đĐ]/g, d => d === 'đ' ? 'd' : 'D');
+            };
+            
+            const searchTermNoDiacritics = removeDiacritics(searchTerm);
+            
+            // Tạo điều kiện tìm kiếm: có dấu HOẶC không dấu
+            titleMatchConditions = {
+                $or: [
+                    { title: { $regex: searchTerm, $options: 'i' } }, // Tìm kiếm có dấu
+                    { title: { $regex: searchTermNoDiacritics, $options: 'i' } } // Tìm kiếm không dấu
+                ]
+            };
+            
+            // TODO: Implement proper relevance scoring sau
+            /*
+            relevanceStage = {
+                $addFields: {
+                    relevanceScore: {
+                        $cond: [
+                            { $ne: [
+                                { $indexOfCP: [{ $toLower: '$title' }, title.trim().toLowerCase()] },
+                                -1
+                            ] }
+                        ],
+                        then: 10,
+                        else: 0
+                    }
+                }
+            };
+            */
+        }
+
+        // Build sort options
+        let sortOptions = {};
+        if (sort_by) {
+            switch (sort_by) {
+                case 'relevance':
+                    // Mặc định: relevance score (nếu có title search) + updated_at
+                    sortOptions = { 
+                        total_views: -1, // Phụ cho relevance
+                        updated_at: -1
+                    };
+                    break;
+                case 'updated_at':
+                    sortOptions = { updated_at: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'createdAt':
+                    sortOptions = { createdAt: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'total_views':
+                    sortOptions = { total_views: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'total_chapters':
+                    sortOptions = { total_chapters: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'rating':
+                    sortOptions = { rating: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'status':
+                    // Sắp xếp theo trạng thái: Hoàn thành > Đang cập nhật > Tạm dừng
+                    sortOptions = { 
+                        $switch: {
+                            branches: [
+                                { case: { $eq: ['$status', 'Hoàn thành'] }, then: 1 },
+                                { case: { $eq: ['$status', 'completed'] }, then: 1 },
+                                { case: { $eq: ['$status', 'Đang cập nhật'] }, then: 2 },
+                                { case: { $eq: ['$status', 'on-going'] }, then: 2 },
+                                { case: { $eq: ['$status', 'Tạm dừng'] }, then: 3 },
+                                { case: { $eq: ['$status', 'dropped'] }, then: 3 }
+                            ],
+                            default: 99
+                        }
+                    };
+                    break;
+                default:
+                    sortOptions = { updated_at: -1, total_views: -1 };
+            }
+        } else {
+            // Mặc định nếu không có sort_by: updated_at + total_views
+            sortOptions = { updated_at: -1, total_views: -1 };
+        }
+
+        // Execute aggregation
+        const aggregationPipeline = [
+            { $match: matchConditions }
+        ];
+
+        // Add title search conditions if searching by title
+        if (Object.keys(titleMatchConditions).length > 0) {
+            aggregationPipeline.push({ $match: titleMatchConditions });
+        }
+
+        // Add relevance stage if searching by title
+        if (Object.keys(relevanceStage).length > 0) {
+            aggregationPipeline.push(relevanceStage);
+        }
+
+        // Add sort stage
+        aggregationPipeline.push({ $sort: sortOptions });
+
+        // Add pagination and lookup stages
+        aggregationPipeline.push(
+            { $skip: skip },
+            { $limit: safeLimit },
+            {
+                $lookup: {
+                    from: 'chapters',
+                    let: { bookId: '$_id' },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ['$book_id', '$$bookId'] } } },
+                        { $sort: { chapter_number: -1 } },
+                        { $limit: 2 },
+                        { $project: { title: 1, chapter_number: 1 } }
+                    ],
+                    as: 'latest_chapters'
+                }
+            },
+            {
+                $project: {
+                    title: 1,
+                    author: 1,
+                    description: 1,
+                    cover_url: 1,
+                    genres: 1,
+                    status: 1,
+                    total_chapters: 1,
+                    total_views: 1,
+                    weekly_views: 1,
+                    latest_chapters: 1,
+                    createdAt: 1,
+                    updatedAt: 1
+                }
+            }
+        );
+
+        const [books, total] = await Promise.all([
+            Book.aggregate(aggregationPipeline),
+            Book.countDocuments(matchConditions)
+        ]);
+
+        const safeTotal = Math.max(0, Number(total) || 0);
+        const totalPages = Math.ceil(safeTotal / safeLimit) || 1;
+
+        return res.json({
+            books: books || [],
+            pagination: {
+                current: safePage,
+                totalPages: totalPages,
+                total: safeTotal,
+                limit: safeLimit
+            },
+            filters: {
+                title: title || '',
+                genres: genres || '',
+                year_start: year_start || '',
+                year_end: year_end || '',
+                status: status || '',
+                sort_by: sort_by || 'relevance',
+                sort_order: sort_order || 'desc'
+            }
+        });
+    } catch (error) {
+        console.error('Lỗi API advanced search:', error);
+        return res.status(500).json({
+            error: 'Không thể thực hiện tìm kiếm nâng cao. Vui lòng thử lại.'
+        });
+    }
+};
+//////////////////////////////////////////////////////////////////////////
+// PUT /api/books/:id
+exports.updateBook = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { title, author, description, cover_url, status, genres } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'ID truyện không hợp lệ.' });
+        }
+
+        const book = await Book.findById(id);
+        if (!book) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy truyện.' });
+        }
+
+        // Cập nhật các trường dữ liệu
+        if (title) book.title = title.trim();
+        if (author) book.author = author.trim();
+        if (description !== undefined) book.description = description.trim();
+        if (cover_url !== undefined) book.cover_url = cover_url.trim();
+        if (status) book.status = status;
+        if (Array.isArray(genres)) book.genres = genres;
+
+        // Lưu ý: Không tự động đổi Slug khi đổi Tên truyện để tránh lỗi 404 cho các link đã share (Chuẩn SEO)
+
+        const updatedBook = await book.save();
+
+        return res.status(200).json({
+            success: true,
+            message: 'Cập nhật thông tin truyện thành công.',
+            book: updatedBook
+        });
+    } catch (error) {
+        console.error('Lỗi API cập nhật truyện:', error);
+        return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi cập nhật truyện.' });
+    }
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+// DELETE /api/books/:id
+exports.deleteBook = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ error: 'ID truyện không hợp lệ.' });
+        }
+
+        const book = await Book.findById(id);
+        if (!book) {
+            return res.status(404).json({ error: 'Không tìm thấy truyện.' });
+        }
+
+        // BẢO ĐẢM TOÀN VẸN DỮ LIỆU: Xóa toàn bộ chương liên quan TRƯỚC
+        await Chapter.deleteMany({ book_id: id });
+
+        // Sau khi đã dọn sạch chương, tiến hành xóa truyện
+        await Book.findByIdAndDelete(id);
+
+        return res.status(200).json({ 
+            message: 'Đã xóa truyện và toàn bộ chương liên quan thành công.' 
+        });
+    } catch (error) {
+        console.error('Lỗi API xóa truyện:', error);
+        return res.status(500).json({ error: 'Lỗi máy chủ khi xóa truyện.' });
     }
 };

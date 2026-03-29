@@ -37,7 +37,7 @@ const bookSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Đang cập nhật', 'Hoàn thành', 'Tạm hoãn'],
+        enum: ['Đang cập nhật', 'Hoàn thành', 'Tạm dừng', 'Hết', 'completed', 'on-going', 'dropped'],
         default: 'Đang cập nhật'
     },
     total_chapters: {
@@ -55,6 +55,10 @@ const bookSchema = new mongoose.Schema({
     weekly_views_start: {
         type: Date,
         default: null
+    },
+    slug: {
+        type: String,
+        unique: true, // Đảm bảo không có 2 truyện trùng URL
     }
 }, {
     timestamps: true
@@ -62,5 +66,7 @@ const bookSchema = new mongoose.Schema({
 
 bookSchema.index({ updatedAt: -1 });
 bookSchema.index({ weekly_views_start: -1, weekly_views: -1, total_views: -1 });
+bookSchema.index({ genres: 1 });
+bookSchema.index({ status: 1 });
 
 module.exports = mongoose.model('Book', bookSchema);

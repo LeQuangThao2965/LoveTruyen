@@ -75,6 +75,10 @@ const Header = () => {
     const [userRole, setUserRole] = useState('user'); // State riêng biệt cho Role
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [suggestions, setSuggestions] = useState([]);
+    const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+    const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
     
     // State cho Dropdown
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -193,6 +197,126 @@ const Header = () => {
 
     const handleSearchToggle = () => {
         setIsSearchOpen((prev) => !prev);
+        if (!isSearchOpen) {
+            // Focus vào input khi mở search
+            setTimeout(() => searchInputRef.current?.focus(), 100);
+        } else {
+            // Clear khi đóng
+            setSearchQuery('');
+            setSuggestions([]);
+            setSelectedSuggestionIndex(-1);
+        }
+    };
+
+    // Fetch suggestions từ API
+    const fetchSuggestions = async (query) => {
+        if (!query || query.trim().length < 2) {
+            setSuggestions([]);
+            return;
+        }
+
+        setIsSuggestionsLoading(true);
+        try {
+            const response = await api.get('/books/suggestions', {
+                params: { q: query.trim(), limit: 8 }
+            });
+            setSuggestions(response || []);
+            setSelectedSuggestionIndex(-1);
+        } catch (error) {
+            console.error('Lỗi khi fetch suggestions:', error);
+            setSuggestions([]);
+        } finally {
+            setIsSuggestionsLoading(false);
+        }
+    };
+
+    // Debounce search
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            fetchSuggestions(searchQuery);
+        }, 300);
+
+        return () => clearTimeout(timeoutId);
+    }, [searchQuery]);
+
+    // Handle input change
+    const handleSearchInputChange = (e) => {
+        const value = e.target.value;
+        setSearchQuery(value);
+        setSelectedSuggestionIndex(-1);
+    };
+
+    // Handle keyboard navigation
+    const handleSearchKeyDown = (e) => {
+        if (!suggestions.length) return;
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                setSelectedSuggestionIndex(prev => 
+                    prev < suggestions.length - 1 ? prev + 1 : 0
+                );
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setSelectedSuggestionIndex(prev => 
+                    prev > 0 ? prev - 1 : suggestions.length - 1
+                );
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (selectedSuggestionIndex >= 0) {
+                    const selectedBook = suggestions[selectedSuggestionIndex];
+                    navigate(`/truyen/${selectedBook._id}`);
+                    setSearchQuery('');
+                    setSuggestions([]);
+                    setSelectedSuggestionIndex(-1);
+                    setIsSearchOpen(false);
+                } else {
+                    handleSearchSubmit();
+                }
+                break;
+            case 'Escape':
+                setSearchQuery('');
+                setSuggestions([]);
+                setSelectedSuggestionIndex(-1);
+                break;
+        }
+    };
+
+    // Handle search submit
+    const handleSearchSubmit = () => {
+        const query = searchQuery.trim();
+        if (query) {
+            if (selectedSuggestionIndex >= 0) {
+                const selectedBook = suggestions[selectedSuggestionIndex];
+                navigate(`/truyen/${selectedBook._id}`);
+            } else {
+                navigate(`/search?q=${encodeURIComponent(query)}`);
+            }
+            setSearchQuery('');
+            setSuggestions([]);
+            setSelectedSuggestionIndex(-1);
+            setIsSearchOpen(false);
+        }
+    };
+
+    // Handle suggestion click
+    const handleSuggestionClick = (book) => {
+        navigate(`/truyen/${book._id}`);
+        setSearchQuery('');
+        setSuggestions([]);
+        setSelectedSuggestionIndex(-1);
+        setIsSearchOpen(false);
+    };
+
+    // Navigate to advanced search
+    const handleAdvancedSearch = () => {
+        navigate('/search-advanced');
+        setSearchQuery('');
+        setSuggestions([]);
+        setSelectedSuggestionIndex(-1);
+        setIsSearchOpen(false);
     };
     const getAvatarUrl = (user) => {
         if (!user) return '';
@@ -228,31 +352,95 @@ const Header = () => {
                         
                         {/* 1. THANH TIM KIEM */}
                         <div className="hidden md:flex items-center" ref={searchRef}>
-                            <div
-                                className={`flex items-center overflow-hidden rounded-full border bg-gray-100/80 transition-all duration-300 ${
-                                    isSearchOpen
-                                        ? 'w-64 border-indigo-200 px-3 py-1.5 shadow-sm'
-                                        : 'w-10 border-transparent p-0 hover:bg-gray-100'
-                                }`}
-                            >
-                                <input
-                                    ref={searchInputRef}
-                                    type="text"
-                                    placeholder="Tim truyen..."
-                                    className={`bg-transparent text-sm text-gray-700 outline-none placeholder-gray-400 transition-all duration-200 ${
+                            <div className="relative">
+                                <div
+                                    className={`flex items-center overflow-hidden rounded-full border bg-gray-100/80 transition-all duration-300 ${
                                         isSearchOpen
-                                            ? 'mr-2 w-full opacity-100'
-                                            : 'w-0 opacity-0 pointer-events-none'
+                                            ? 'w-80 border-indigo-200 px-3 py-1.5 shadow-sm'
+                                            : 'w-10 border-transparent p-0 hover:bg-gray-100'
                                     }`}
-                                />
-
-                                <button
-                                    type="button"
-                                    onClick={handleSearchToggle}
-                                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition hover:text-indigo-600"
                                 >
-                                    <Icons.Search />
-                                </button>
+                                    <input
+                                        ref={searchInputRef}
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={handleSearchInputChange}
+                                        onKeyDown={handleSearchKeyDown}
+                                        placeholder="Tim truyen..."
+                                        className={`bg-transparent text-sm text-gray-700 outline-none placeholder-gray-400 transition-all duration-200 ${
+                                            isSearchOpen
+                                                ? 'mr-2 w-full opacity-100'
+                                                : 'w-0 opacity-0 pointer-events-none'
+                                        }`}
+                                    />
+
+                                    <button
+                                        type="button"
+                                        onClick={handleSearchToggle}
+                                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition hover:text-indigo-600"
+                                    >
+                                        <Icons.Search />
+                                    </button>
+                                </div>
+
+                                {/* Dropdown Container */}
+                                {isSearchOpen && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                                        {/* Suggestions */}
+                                        {suggestions.length > 0 && (
+                                            <div className="max-h-80 overflow-y-auto">
+                                                {suggestions.map((book, index) => (
+                                                    <div
+                                                        key={book._id}
+                                                        onClick={() => handleSuggestionClick(book)}
+                                                        className={`flex items-center px-3 py-2 cursor-pointer transition-colors ${
+                                                            index === selectedSuggestionIndex
+                                                                ? 'bg-indigo-50 border-l-2 border-indigo-500'
+                                                                : 'hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        <img
+                                                            src={book.cover_url || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNTYiIHZpZXdCb3g9IjAgMCA0MCA1NiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjU2IiBmaWxsPSIjZTVlN2ViIi8+CjxwYXRoIGQ9Ik0xNiAyMUgyNFYyM0gxNlYyMVoiIGZpbGw9IiM2YjcyODAiLz4KPHBhdGggZD0iTTEzIDMySDI3VjM0SDEzVjMyWiIgZmlsbD0iIzZiNzI4MCIvPgo8dGV4dCB4PSIyMCIgeT0iNDQiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI4IiBmaWxsPSIjNmI3MjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5ObyBDPC90ZXh0Pgo8L3N2Zz4='}
+                                                            alt={book.title}
+                                                            className="w-10 h-14 object-cover rounded mr-3 shrink-0"
+                                                            onError={(e) => {
+                                                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNTYiIHZpZXdCb3g9IjAgMCA0MCA1NiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjU2IiBmaWxsPSIjZTVlN2ViIi8+CjxwYXRoIGQ9Ik0xNiAyMUgyNFYyM0gxNlYyMVoiIGZpbGw9IiM2YjcyODAiLz4KPHBhdGggZD0iTTEzIDMySDI3VjM0SDEzVjMyWiIgZmlsbD0iIzZiNzI4MCIvPgo8dGV4dCB4PSIyMCIgeT0iNDQiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI4IiBmaWxsPSIjNmI3MjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5ObyBDPC90ZXh0Pgo8L3N2Zz4=';
+                                                            }}
+                                                        />
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="text-sm font-medium text-gray-900 truncate">
+                                                                {book.title}
+                                                            </div>
+                                                            <div className="text-xs text-gray-500 truncate">
+                                                                {book.author}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* No Results Message */}
+                                        {searchQuery.trim().length >= 2 && !isSuggestionsLoading && suggestions.length === 0 && (
+                                            <div className="p-3 border-t border-gray-200">
+                                                <div className="text-sm text-gray-500 text-center">
+                                                    Không tìm thấy truyện phù hợp
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Advanced Search Button */}
+                                        <div className="border-t border-gray-200">
+                                            <button
+                                                onClick={handleAdvancedSearch}
+                                                className="w-full px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center justify-center"
+                                            >
+                                                <Icons.Search className="w-4 h-4 mr-2" />
+                                                Tìm kiếm nâng cao
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
