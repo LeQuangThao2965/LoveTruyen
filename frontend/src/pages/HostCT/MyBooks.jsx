@@ -5,6 +5,9 @@ import { FaBookOpen, FaChartBar, FaEdit, FaPlus, FaTrash } from 'react-icons/fa'
 import { supabase } from '../../supabaseClient';
 import api from '../../services/axiosConfig';
 import UploadBook from './UploadBook';
+import AddChapter from './AddChapter';
+//import modal hiển thị thông báo để khi xóa sách, có thể đảm bảo ko ấn nhầm
+import DeleteBookModal from './DeleteBookModal';
 
 const PLACEHOLDER_COVER = 'https://placehold.co/120x160/e5e7eb/6b7280?text=No+Cover';
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
@@ -84,29 +87,47 @@ const normalizeBooks = (payload) => {
 };
 
 const MyBooks = () => {
-    const [searchParams, setSearchParams] = useSearchParams();
-    const [books, setBooks] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-    const [userRole, setUserRole] = useState('');
-    const [showAllBooks, setShowAllBooks] = useState(false);
-    const [showCoverColumn, setShowCoverColumn] = useState(false);
-    const [selectedGenres, setSelectedGenres] = useState([]);
-    const [itemsPerPage, setItemsPerPage] = useState(20);
-    const [currentPage, setCurrentPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [books, setBooks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isAddChapterModalOpen, setIsAddChapterModalOpen] = useState(false);
+  const [currentBookId, setCurrentBookId] = useState(null);
+  const [bookToDelete, setBookToDelete] = useState(null); //add vô để delete
+  const [userRole, setUserRole] = useState('');
+  const [showAllBooks, setShowAllBooks] = useState(false);
+  const [showCoverColumn, setShowCoverColumn] = useState(false);
+  const [selectedGenres, setSelectedGenres] = useState([]);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [currentPage, setCurrentPage] = useState(1);
 
     useEffect(() => {
         fetchMyBooks();
     }, [showAllBooks]);
 
     useEffect(() => {
-        if (searchParams.get('openUpload') !== '1') return;
-
-        setIsUploadModalOpen(true);
-        const nextSearchParams = new URLSearchParams(searchParams);
-        nextSearchParams.delete('openUpload');
-        setSearchParams(nextSearchParams, { replace: true });
-    }, [searchParams, setSearchParams]);
+    if (searchParams.get('openUpload') !== '1') return;
+    
+    setIsUploadModalOpen(true);
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete('openUpload');
+    setSearchParams(nextSearchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+  
+  useEffect(() => {
+    if (searchParams.get('addChapter') !== '1') return;
+    
+    const bookId = searchParams.get('bookId');
+    if (bookId) {
+      setCurrentBookId(bookId);
+      setIsAddChapterModalOpen(true);
+    }
+    
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete('addChapter');
+    nextSearchParams.delete('bookId');
+    setSearchParams(nextSearchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
     const fetchMyBooks = async () => {
         setLoading(true);
@@ -397,24 +418,30 @@ const MyBooks = () => {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex justify-center gap-3">
-                                                    <Link
-                                                        to={`/upload-chapter/${book._id}`}
+                                                    {/* NÚT THÊM CHƯƠNG MỚI CHO SÁCH */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setCurrentBookId(book._id);
+                                                            setIsAddChapterModalOpen(true);
+                                                        }}
                                                         className="p-2 text-white bg-green-500 hover:bg-green-600 rounded-lg transition"
                                                         title="Thêm chương mới"
                                                     >
                                                         <FaPlus size={14} />
+                                                    </button>
+
+                                                    <Link
+                                                        to={`/host/edit-book/${book.slug || book._id}`}
+                                                        className="p-2 text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition inline-flex items-center justify-center"
+                                                        title="Cập nhật truyện"
+                                                    >
+                                                        <FaEdit size={14} />
                                                     </Link>
 
                                                     <button
                                                         type="button"
-                                                        className="p-2 text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition"
-                                                        title="Sửa thông tin truyện"
-                                                    >
-                                                        <FaEdit size={14} />
-                                                    </button>
-
-                                                    <button
-                                                        type="button"
+                                                        onClick={() => setBookToDelete(book)} // Gắn book vào state để mở modal
                                                         className="p-2 text-white bg-red-500 hover:bg-red-600 rounded-lg transition"
                                                         title="Xóa truyện"
                                                     >
@@ -474,10 +501,31 @@ const MyBooks = () => {
                 )}
             </div>
 
+            {/* MODAL ĐĂNG TRUYỆN (BOOK) MỚI */}
             <UploadBook
                 isOpen={isUploadModalOpen}
                 onClose={() => setIsUploadModalOpen(false)}
                 onSuccess={fetchMyBooks}
+            />
+
+            {/* THÊM ĐOẠN NÀY ĐỂ RENDER MODAL CHỨC NĂNG "THÊM CHƯƠNG" */}
+            {isAddChapterModalOpen && (
+                <AddChapter 
+                    bookId={currentBookId} 
+                    onClose={() => {
+                        setIsAddChapterModalOpen(false);
+                        setCurrentBookId(null);
+                    }}
+                    onSuccess={fetchMyBooks} // Cập nhật lại list truyện (số chương) sau khi thêm thành công
+                />
+            )}
+
+            {/* THÊM MODAL XÓA TRUYỆN */}
+            <DeleteBookModal 
+                isOpen={!!bookToDelete} 
+                book={bookToDelete}
+                onClose={() => setBookToDelete(null)} 
+                onSuccess={fetchMyBooks} // Xóa xong tự động load lại bảng
             />
         </div>
     );

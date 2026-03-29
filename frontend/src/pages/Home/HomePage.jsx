@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/axiosConfig';
+import SharedHomeBookCard from '../../components/HomeBookCard';
 
 const PLACEHOLDER_COVER = 'https://placehold.co/320x420/e5e7eb/6b7280?text=No+Cover';
 const HOT_BOOK_LIMIT = 10;
@@ -356,7 +357,7 @@ const HomePage = () => {
             <section className="rounded-2xl border border-orange-100 bg-white p-4 shadow-sm">
                 <div className="mb-4 flex items-center justify-between gap-3">
                     <h2 className="border-l-4 border-orange-500 pl-3 text-xl font-bold text-orange-700">
-                        Truyen hot trong tuan
+                        Truyện hot Tuần
                     </h2>
 
                     <div className="flex items-center gap-2">
