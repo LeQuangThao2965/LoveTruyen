@@ -319,81 +319,73 @@ exports.createBook = async (req, res) => {
     }
 };
 
-// GET /api/books/host-stats?uploader_id=<id>&all=true
-// Tra ve thong ke tong quan cho Host/Admin.
-// - uploader_id: loc theo nguoi dang (host)
-// - all=true: admin xem thong ke toan bo he thong
+// GET /api/books/host-stats
 exports.getHostStats = async (req, res) => {
     try {
         const { uploader_id, all } = req.query;
-        const showAll = all === 'true';
+        const query = {};
 
-        if (!showAll && (!uploader_id || typeof uploader_id !== 'string' || !uploader_id.trim())) {
-            return res.status(400).json({ error: 'Thieu uploader_id.' });
+        // Nếu admin xem của tất cả (all=true) thì không dùng uploader_id
+        // Nếu host xem thì lọc theo uploader_id của họ
+        if (!all && uploader_id) {
+            query.uploader_id = uploader_id;
         }
 
-        const weekStart = getWeekStart();
-        const matchStage = showAll ? {} : { uploader_id: uploader_id.trim() };
-        const findFilter = showAll ? {} : { uploader_id: uploader_id.trim() };
-
-        const [aggregateResult, topBooks] = await Promise.all([
-            Book.aggregate([
-                { $match: matchStage },
-                {
-                    $group: {
-                        _id: null,
-                        totalBooks: { $sum: 1 },
-                        totalViews: { $sum: { $ifNull: ['$total_views', 0] } },
-                        totalChapters: { $sum: { $ifNull: ['$total_chapters', 0] } },
-                        weeklyViews: {
-                            $sum: {
-                                $cond: [
-                                    { $eq: ['$weekly_views_start', weekStart] },
-                                    { $ifNull: ['$weekly_views', 0] },
-                                    0
-                                ]
-                            }
-                        },
-                        statusList: { $push: { $ifNull: ['$status', 'Đang cập nhật'] } }
-                    }
+        // 1. Tính tổng số liệu bằng Aggregation (nhanh và tối ưu)
+        const stats = await Book.aggregate([
+            { $match: query },
+            {
+                $group: {
+                    _id: null,
+                    totalBooks: { $sum: 1 },
+                    totalViews: { $sum: { $ifNull: ["$total_views", 0] } },
+                    weeklyViews: { $sum: { $ifNull: ["$weekly_views", 0] } },
+                    totalChapters: { $sum: { $ifNull: ["$total_chapters", 0] } }
                 }
-            ]),
-            Book.find(
-                findFilter,
-                { title: 1, cover_url: 1, total_views: 1, total_chapters: 1, status: 1 }
-            )
-                .sort({ total_views: -1 })
-                .limit(5)
-                .lean()
+            }
         ]);
 
-        const stats = aggregateResult[0] ?? {
+        const basicStats = stats[0] || {
             totalBooks: 0,
             totalViews: 0,
-            totalChapters: 0,
             weeklyViews: 0,
-            statusList: []
+            totalChapters: 0
         };
 
-        // Dem so truyen theo trang thai
-        const booksByStatus = stats.statusList.reduce((acc, status) => {
-            acc[status] = (acc[status] || 0) + 1;
-            return acc;
-        }, {});
+        // 2. Phân loại theo trạng thái (Đang cập nhật, Hoàn thành, Tạm hoãn)
+        const statusStats = await Book.aggregate([
+            { $match: query },
+            {
+                $group: {
+                    _id: "$status",
+                    count: { $sum: 1 }
+                }
+            }
+        ]);
 
+        const booksByStatus = {};
+        statusStats.forEach(item => {
+            const statusName = item._id || 'Đang cập nhật'; // Fallback nếu rỗng
+            booksByStatus[statusName] = item.count;
+        });
+
+        // 3. Lấy Top 5 truyện nhiều view nhất
+        const topBooks = await Book.find(query)
+            .select('_id title cover_url total_views total_chapters status slug')
+            .sort({ total_views: -1 })
+            .limit(5);
+
+        // Trả kết quả về cho Frontend
         return res.status(200).json({
-            totalBooks: stats.totalBooks,
-            totalViews: stats.totalViews,
-            weeklyViews: stats.weeklyViews,
-            totalChapters: stats.totalChapters,
+            ...basicStats,
             booksByStatus,
             topBooks
         });
     } catch (error) {
-        console.error('Loi API host stats:', error);
-        return res.status(500).json({ error: 'Khong the lay thong ke. Vui long thu lai.' });
+        console.error('Lỗi API getHostStats:', error);
+        return res.status(500).json({ error: 'Lỗi server khi lấy thống kê.' });
     }
-}
+};
 
 // GET /api/books/suggestions?q=<keyword>
 exports.getBookSuggestions = async (req, res) => {
@@ -475,7 +467,13 @@ exports.getBooksAdvancedSearch = async (req, res) => {
         // Build match conditions
         const matchConditions = {};
 
-        // Genres filter (AND condition - phải có tất cả genres được chọn)
+        // Title search (case-insensitive regex)
+        if (title && typeof title === 'string' && title.trim()) {
+            matchConditions.title = { $regex: title.trim(), $options: 'i' };
+        }
+
+        // Genres filter (AND condition - truyện phải có TẤT CẢ các genres được chọn)
+        // Ví dụ: chọn "Tiên Hiệp" và "Huyền Huyễn" → chỉ hiện truyện có cả hai tag
         if (genres && typeof genres === 'string') {
             const genresArray = genres.split(',').map(g => g.trim()).filter(g => g);
             if (genresArray.length > 0) {

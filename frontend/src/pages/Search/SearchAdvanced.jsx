@@ -3,17 +3,12 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../../services/axiosConfig';
 import HomeBookCard from '../../components/HomeBookCard';
 
-// Danh sách thể loại phổ biến
-const POPULAR_GENRES = [
-    'Tiên Hiệp', 'Huyền Huyễn', 'Kiếm Hiệp', 'Đô Thị', 'Ngôn Tình',
-    'Dã Sử', 'Khoa Huyễn', 'Kinh Dị', 'Hài Hước', 'Truyện Ma',
-    'Trinh Thám', 'Tiểu Thuyết', 'Lịch Sử', 'Võng Du', 'Dị Giới',
-    'Hệ Thống', 'Hậu Cung', 'Cổ Trang', 'Ngược', 'Sủng',
-    'HE', 'SE', 'BL', 'GL', 'Hướng nội'
-];
-
 const SearchAdvanced = () => {
     const [searchParams, setSearchParams] = useSearchParams();
+    
+    // State cho available genres từ database
+    const [availableGenres, setAvailableGenres] = useState([]);
+    const [genresLoading, setGenresLoading] = useState(false);
     
     // State cho filters
     const [filters, setFilters] = useState({
@@ -40,13 +35,27 @@ const SearchAdvanced = () => {
     // State cho genre search
     const [genreSearchQuery, setGenreSearchQuery] = useState('');
     
-    // Filtered genres cho quick select
+    // Filtered genres cho quick select - lấy từ database
     const filteredGenres = useMemo(() => {
-        if (!genreSearchQuery.trim()) return POPULAR_GENRES;
-        return POPULAR_GENRES.filter(genre => 
+        if (!genreSearchQuery.trim()) return availableGenres;
+        return availableGenres.filter(genre => 
             genre.toLowerCase().includes(genreSearchQuery.toLowerCase())
         );
-    }, [genreSearchQuery]);
+    }, [genreSearchQuery, availableGenres]);
+
+    // Fetch available genres từ database
+    const fetchAvailableGenres = useCallback(async () => {
+        setGenresLoading(true);
+        try {
+            const response = await api.get('/books/genres');
+            setAvailableGenres(response.genres || []);
+        } catch (error) {
+            console.error('Lỗi tải danh sách thể loại:', error);
+            setAvailableGenres([]);
+        } finally {
+            setGenresLoading(false);
+        }
+    }, []);
 
     // Fetch search results
     const fetchSearchResults = useCallback(async (page = 1) => {
@@ -129,11 +138,16 @@ const SearchAdvanced = () => {
         }
     };
 
-    // Initial load và filter changes
+    // Initial load genres và filter changes
+    useEffect(() => {
+        // Load genres có sẵn từ database
+        fetchAvailableGenres();
+    }, [fetchAvailableGenres]);
+
     useEffect(() => {
         // Load khi vào page hoặc khi filters thay đổi
         fetchSearchResults(1);
-    }, [filters.title, filters.genres, filters.year_start, filters.year_end, filters.status, filters.sort_by, filters.sort_order]);
+    }, [filters.title, filters.genres, filters.year_start, filters.year_end, filters.status, filters.sort_by, filters.sort_order, fetchSearchResults]);
 
     return (
         <div className="container mx-auto px-4 py-6">
@@ -194,8 +208,11 @@ const SearchAdvanced = () => {
                         {/* Genre Filter */}
                         <div className="mb-4">
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Thể loại (có thể chọn nhiều)
+                                Thể loại (chọn nhiều để tìm chính xác hơn)
                             </label>
+                            <div className="text-xs text-gray-500 mb-2">
+                                💡 Chọn nhiều thể loại sẽ tìm truyện có CẢ các thể loại đó
+                            </div>
                             
                             {/* Quick Genre Search */}
                             <div className="mb-2">
@@ -210,17 +227,28 @@ const SearchAdvanced = () => {
                             
                             {/* Genre List */}
                             <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-md p-2">
-                                {filteredGenres.map(genre => (
-                                    <label key={genre} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
-                                        <input
-                                            type="checkbox"
-                                            checked={filters.genres.includes(genre)}
-                                            onChange={() => handleGenreToggle(genre)}
-                                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                        />
-                                        <span className="text-sm text-gray-700">{genre}</span>
-                                    </label>
-                                ))}
+                                {genresLoading ? (
+                                    <div className="flex justify-center items-center py-4">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                                        <span className="ml-2 text-xs text-gray-500">Đang tải thể loại...</span>
+                                    </div>
+                                ) : filteredGenres.length === 0 ? (
+                                    <div className="text-center py-4 text-xs text-gray-500">
+                                        {genreSearchQuery ? 'Không tìm thấy thể loại nào' : 'Chưa có thể loại nào'}
+                                    </div>
+                                ) : (
+                                    filteredGenres.map(genre => (
+                                        <label key={genre} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                            <input
+                                                type="checkbox"
+                                                checked={filters.genres.includes(genre)}
+                                                onChange={() => handleGenreToggle(genre)}
+                                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                            />
+                                            <span className="text-sm text-gray-700">{genre}</span>
+                                        </label>
+                                    ))
+                                )}
                             </div>
                             
                             {/* Selected Genres */}

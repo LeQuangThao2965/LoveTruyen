@@ -8,10 +8,10 @@ const {
     uploadBookCover,
     getBookSuggestions,
     getBooksAdvancedSearch,
-    deleteBook
+    deleteBook,
+    getHostStats,
+    updateBook
 } = require('../controllers/bookController');
-
-const bookController = require('../controllers/bookController');
 
 // Danh sach truyen (co kem 2 chapter moi nhat cho moi truyen)
 router.get('/', getBooks);
@@ -28,14 +28,17 @@ router.get('/search-advanced', getBooksAdvancedSearch);
 // Upload anh bia
 router.post('/upload-cover', uploadBookCover);
 
+//thống kê cho host
+router.get('/host-stats', getHostStats);
+
 // Chi tiet truyen
-router.get('/:id', getBookById);
+router.get('/:idOrSlug', getBookById);
 
 // Tao truyen moi
 router.post('/', createBook);
 
 // Khai báo route sửa truyện
-router.put('/:id', bookController.updateBook); 
+router.put('/:id', updateBook); 
 
 router.delete('/:id', deleteBook);
 
