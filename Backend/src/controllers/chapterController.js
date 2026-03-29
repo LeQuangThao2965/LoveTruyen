@@ -89,7 +89,8 @@ const incrementBookViewStats = async (bookId) => {
                     }
                 },
                 { $unset: '__sameWeek' }
-            ]
+            ],
+            { updatePipeline: true }
         );
     } catch (pipelineError) {
         // Fallback for older MongoDB versions that don't support update pipeline.

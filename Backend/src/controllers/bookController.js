@@ -319,6 +319,291 @@ exports.createBook = async (req, res) => {
     }
 };
 
+// GET /api/books/suggestions?q=<keyword>
+exports.getBookSuggestions = async (req, res) => {
+    try {
+        const { q } = req.query;
+        
+        if (!q || typeof q !== 'string' || q.trim().length === 0) {
+            return res.json([]);
+        }
+
+        const keyword = q.trim().toLowerCase();
+        const limit = Math.min(parsePositiveInt(req.query.limit, 8), 12);
+
+        // Tìm kiếm theo title và author với regex case-insensitive
+        const books = await Book.aggregate([
+            {
+                $match: {
+                    $or: [
+                        { title: { $regex: keyword, $options: 'i' } },
+                        { author: { $regex: keyword, $options: 'i' } }
+                    ]
+                }
+            },
+            {
+                $addFields: {
+                    // Tính điểm relevance cho việc sắp xếp
+                    relevanceScore: {
+                        $add: [
+                            { $cond: [{ $regexMatch: { input: { $toLower: '$title' }, regex: keyword } }, 10, 0] },
+                            { $cond: [{ $eq: [{ $toLower: '$title' }, keyword] }, 5, 0] },
+                            { $cond: [{ $regexMatch: { input: { $toLower: '$author' }, regex: keyword } }, 3, 0] },
+                            { $cond: [{ $eq: [{ $toLower: '$author' }, keyword] }, 2, 0] }
+                        ]
+                    }
+                }
+            },
+            { $sort: { relevanceScore: -1, total_views: -1, updatedAt: -1 } },
+            { $limit: limit },
+            {
+                $project: {
+                    _id: 1,
+                    title: 1,
+                    author: 1,
+                    cover_url: 1,
+                    total_views: 1,
+                    relevanceScore: 1
+                }
+            }
+        ]);
+
+        return res.json(books);
+    } catch (error) {
+        console.error('Loi API suggestions:', error);
+        return res.status(500).json({
+            error: 'Khong the lay danh sach gợi ý. Vui long thu lai.'
+        });
+    }
+};
+
+// GET /api/books/search-advanced
+exports.getBooksAdvancedSearch = async (req, res) => {
+    try {
+        const {
+            title,
+            genres,
+            year_start,
+            year_end,
+            status,
+            sort_by = 'relevance',
+            sort_order = 'desc',
+            page = 1,
+            limit = 20
+        } = req.query;
+
+        const safePage = parsePositiveInt(page, DEFAULT_PAGE);
+        const safeLimit = Math.min(parsePositiveInt(limit, DEFAULT_GET_BOOK_LIMIT), MAX_GET_BOOK_LIMIT);
+        const skip = (safePage - 1) * safeLimit;
+
+        // Build match conditions
+        const matchConditions = {};
+
+        // Genres filter (AND condition - phải có tất cả genres được chọn)
+        if (genres && typeof genres === 'string') {
+            const genresArray = genres.split(',').map(g => g.trim()).filter(g => g);
+            if (genresArray.length > 0) {
+                matchConditions.genres = { $all: genresArray };
+            }
+        }
+
+        // Year range filter
+        if (year_start || year_end) {
+            matchConditions.createdAt = {};
+            if (year_start) {
+                const startYear = parsePositiveInt(year_start, 2000);
+                matchConditions.createdAt.$gte = new Date(`${startYear}-01-01T00:00:00.000Z`);
+            }
+            if (year_end) {
+                const endYear = parsePositiveInt(year_end, new Date().getFullYear());
+                matchConditions.createdAt.$lte = new Date(`${endYear}-12-31T23:59:59.999Z`);
+            }
+        }
+
+        // Status filter
+        if (status && typeof status === 'string' && status.trim()) {
+            matchConditions.status = status.trim();
+        }
+
+        // Add relevance scoring for title search
+        let relevanceStage = {};
+        let titleMatchConditions = {};
+        
+        if (title && typeof title === 'string' && title.trim()) {
+            const searchTerm = title.trim();
+            
+            // Tạo search term không dấu
+            const removeDiacritics = (str) => {
+                return str.normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .replace(/[đĐ]/g, d => d === 'đ' ? 'd' : 'D');
+            };
+            
+            const searchTermNoDiacritics = removeDiacritics(searchTerm);
+            
+            // Tạo điều kiện tìm kiếm: có dấu HOẶC không dấu
+            titleMatchConditions = {
+                $or: [
+                    { title: { $regex: searchTerm, $options: 'i' } }, // Tìm kiếm có dấu
+                    { title: { $regex: searchTermNoDiacritics, $options: 'i' } } // Tìm kiếm không dấu
+                ]
+            };
+            
+            // TODO: Implement proper relevance scoring sau
+            /*
+            relevanceStage = {
+                $addFields: {
+                    relevanceScore: {
+                        $cond: [
+                            { $ne: [
+                                { $indexOfCP: [{ $toLower: '$title' }, title.trim().toLowerCase()] },
+                                -1
+                            ] }
+                        ],
+                        then: 10,
+                        else: 0
+                    }
+                }
+            };
+            */
+        }
+
+        // Build sort options
+        let sortOptions = {};
+        if (sort_by) {
+            switch (sort_by) {
+                case 'relevance':
+                    // Mặc định: relevance score (nếu có title search) + updated_at
+                    sortOptions = { 
+                        total_views: -1, // Phụ cho relevance
+                        updated_at: -1
+                    };
+                    break;
+                case 'updated_at':
+                    sortOptions = { updated_at: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'createdAt':
+                    sortOptions = { createdAt: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'total_views':
+                    sortOptions = { total_views: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'total_chapters':
+                    sortOptions = { total_chapters: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'rating':
+                    sortOptions = { rating: sort_order === 'desc' ? -1 : 1 };
+                    break;
+                case 'status':
+                    // Sắp xếp theo trạng thái: Hoàn thành > Đang cập nhật > Tạm dừng
+                    sortOptions = { 
+                        $switch: {
+                            branches: [
+                                { case: { $eq: ['$status', 'Hoàn thành'] }, then: 1 },
+                                { case: { $eq: ['$status', 'completed'] }, then: 1 },
+                                { case: { $eq: ['$status', 'Đang cập nhật'] }, then: 2 },
+                                { case: { $eq: ['$status', 'on-going'] }, then: 2 },
+                                { case: { $eq: ['$status', 'Tạm dừng'] }, then: 3 },
+                                { case: { $eq: ['$status', 'dropped'] }, then: 3 }
+                            ],
+                            default: 99
+                        }
+                    };
+                    break;
+                default:
+                    sortOptions = { updated_at: -1, total_views: -1 };
+            }
+        } else {
+            // Mặc định nếu không có sort_by: updated_at + total_views
+            sortOptions = { updated_at: -1, total_views: -1 };
+        }
+
+        // Execute aggregation
+        const aggregationPipeline = [
+            { $match: matchConditions }
+        ];
+
+        // Add title search conditions if searching by title
+        if (Object.keys(titleMatchConditions).length > 0) {
+            aggregationPipeline.push({ $match: titleMatchConditions });
+        }
+
+        // Add relevance stage if searching by title
+        if (Object.keys(relevanceStage).length > 0) {
+            aggregationPipeline.push(relevanceStage);
+        }
+
+        // Add sort stage
+        aggregationPipeline.push({ $sort: sortOptions });
+
+        // Add pagination and lookup stages
+        aggregationPipeline.push(
+            { $skip: skip },
+            { $limit: safeLimit },
+            {
+                $lookup: {
+                    from: 'chapters',
+                    let: { bookId: '$_id' },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ['$book_id', '$$bookId'] } } },
+                        { $sort: { chapter_number: -1 } },
+                        { $limit: 2 },
+                        { $project: { title: 1, chapter_number: 1 } }
+                    ],
+                    as: 'latest_chapters'
+                }
+            },
+            {
+                $project: {
+                    title: 1,
+                    author: 1,
+                    description: 1,
+                    cover_url: 1,
+                    genres: 1,
+                    status: 1,
+                    total_chapters: 1,
+                    total_views: 1,
+                    weekly_views: 1,
+                    latest_chapters: 1,
+                    createdAt: 1,
+                    updatedAt: 1
+                }
+            }
+        );
+
+        const [books, total] = await Promise.all([
+            Book.aggregate(aggregationPipeline),
+            Book.countDocuments(matchConditions)
+        ]);
+
+        const safeTotal = Math.max(0, Number(total) || 0);
+        const totalPages = Math.ceil(safeTotal / safeLimit) || 1;
+
+        return res.json({
+            books: books || [],
+            pagination: {
+                current: safePage,
+                totalPages: totalPages,
+                total: safeTotal,
+                limit: safeLimit
+            },
+            filters: {
+                title: title || '',
+                genres: genres || '',
+                year_start: year_start || '',
+                year_end: year_end || '',
+                status: status || '',
+                sort_by: sort_by || 'relevance',
+                sort_order: sort_order || 'desc'
+            }
+        });
+    } catch (error) {
+        console.error('Lỗi API advanced search:', error);
+        return res.status(500).json({
+            error: 'Không thể thực hiện tìm kiếm nâng cao. Vui lòng thử lại.'
+        });
+    }
+};
 //////////////////////////////////////////////////////////////////////////
 // PUT /api/books/:id
 exports.updateBook = async (req, res) => {

@@ -154,7 +154,7 @@ const UserProfile = () => {
                     <div className="bg-white p-6 rounded-2xl shadow-sm border text-center sticky top-24">
                         <div className="relative inline-block mb-4 group">
                             <img 
-                                src={profile.avatar_url || "https://via.placeholder.com/150"} 
+                                src={profile.avatar_url || "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDE1MCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxNTAiIGhlaWdodD0iMTUwIiBmaWxsPSIjZTVlN2ViIi8+CjxjaXJjbGUgY3g9Ijc1IiBjeT0iNjAiIHI9IjIwIiBmaWxsPSIjNmI3MjgwIi8+CjxwYXRoIGQ9Ik00NSAxMjVIMTA1VjEzMUMxMDUgMTQwLjggOTcuOCAxNDggODggMTQ4SDYyQzUyLjIgMTQ4IDQ1IDE0MC44IDQ1IDEzMVYxMjVaIiBmaWxsPSIjNmI3MjgwIi8+Cjx0ZXh0IHg9Ijc1IiB5PSIxMzAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzZiNzI4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+QXZhdGFyPC90ZXh0Pgo8L3N2Zz4="} 
                                 alt="Avatar" 
                                 className="w-32 h-32 rounded-full object-cover border-4 border-indigo-100 mx-auto shadow-md"
                             />

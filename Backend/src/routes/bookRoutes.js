@@ -6,6 +6,8 @@ const {
     getBookById,
     createBook,
     uploadBookCover,
+    getBookSuggestions,
+    getBooksAdvancedSearch,
     deleteBook
 } = require('../controllers/bookController');
 
@@ -16,6 +18,12 @@ router.get('/', getBooks);
 
 // Top truyện hot trong tuần (tối đa 10)
 router.get('/hot-weekly', getHotBooksWeekly);
+
+// Gợi ý tìm kiếm
+router.get('/suggestions', getBookSuggestions);
+
+// Tìm kiếm nâng cao
+router.get('/search-advanced', getBooksAdvancedSearch);
 
 // Upload anh bia
 router.post('/upload-cover', uploadBookCover);
