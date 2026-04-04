@@ -13,6 +13,10 @@ const chapterRoutes = require('./src/routes/chapterRoutes');
 const bookRoutes = require('./src/routes/bookRoutes');
 const crawlerRoutes = require('./src/routes/crawlerRoutes');
 const userRoutes = require('./src/routes/userRoutes');
+const commentRoutes = require('./src/routes/commentRoutes');
+
+// Import route thêm vào tủ sách
+const favoriteRoutes = require('./src/routes/favoriteRoutes');
 
 dotenv.config();
 
@@ -30,12 +34,17 @@ app.use(
     '/uploaded_covers',
     express.static(path.resolve(__dirname, '../frontend/public/uploaded_covers'))
 );
+//grant permission to see uploaded avatars baby
+app.use('/uploaded_avatars', express.static(path.join(__dirname, '../frontend/public/uploaded_avatars')));
 
 app.use('/api/stories', storyRoutes);
 app.use('/api/chapters', chapterRoutes);
 app.use('/api/books', bookRoutes);
 app.use('/api/crawler', crawlerRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/comments', commentRoutes);
+//đăng ký route mới
+app.use('/api/favorites', favoriteRoutes);
 
 // Bat cron crawl metadata (title + cover) theo lich 00:00 va 12:00.
 startCrawlerCron();

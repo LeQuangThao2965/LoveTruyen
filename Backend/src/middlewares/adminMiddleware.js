@@ -27,7 +27,7 @@ const requireAdmin = async (req, res, next) => {
             });
         }
 
-        if (!['admin', 'host'].includes(profile.role)) {
+        if (!['admin', 'host', 'user'].includes(profile.role)) {
             return res.status(403).json({ 
                 message: 'Không có quyền truy cập! Yêu cầu quyền Admin hoặc Host.',
                 currentRole: profile.role 

@@ -659,3 +659,65 @@ VITE_SUPABASE_ANON_KEY=xxx
 3. **Input Validation**: All API inputs are sanitized and validated
 4. **File Upload**: Size limit (5MB) and MIME type validation
 5. **CORS**: Enabled for frontend origin only
+
+---------------------------------------------------------------------------------------------------------------------------------
+# WORKFLOW & CHANGELOG - DỰ ÁN LOVETRUYEN
+**Cập nhật lần cuối:** 30/03/2026
+**Vai trò:** Full Stack Developer (React, Node.js, MongoDB)
+**Mục đích file:** Ghi chú lại tiến độ, kiến trúc và các bug đã giải quyết để dễ dàng hand-off (bàn giao) context cho các phiên làm việc tiếp theo hoặc các công cụ AI hỗ trợ code khác.
+
+---
+
+## 1. TỔNG QUAN KIẾN TRÚC (TECH STACK)
+- **Frontend:** React (Vite), Tailwind CSS, React Router v6.
+- **Backend:** Node.js, Express.js.
+- **Database:** MongoDB (Lưu trữ data hệ thống) + Supabase (Quản lý Authentication & Auth Users).
+- **Thư viện quan trọng mới bổ sung:** `mammoth` (chuyên dùng để bóc tách text/html từ file `.docx`).
+
+---
+
+## 2. CÁC TÍNH NĂNG ĐÃ HOÀN THIỆN & CẬP NHẬT GẦN NHẤT
+
+### A. Quản trị Truyện & Chương (Host/Admin)
+- **Cơ chế URL Slug chuẩn SEO:** Đã chuyển đổi hệ thống route từ việc dùng `_id` mặc định của MongoDB sang dùng `slug` (tên-truyen-khong-dau). Cập nhật API `getBookById` và API lấy chương để tự động dịch Slug thành `_id` phục vụ truy vấn.
+- **Tính năng Đăng/Thêm Chương Hàng Loạt (Batch Upload):**
+  - Xóa bỏ việc nhập text thủ công (gỡ thư viện `react-quill`).
+  - Dùng `mammoth` bóc tách dữ liệu thẳng từ file Word (`.docx`).
+  - Tích hợp Regex tự động nhận diện Số chương và Tên chương từ tên file (Format chuẩn: `Số - Tên chương.docx`).
+  - Xử lý upload tuần tự (Sequential Upload) lên Server để tránh nghẽn Database.
+- **Tính năng Sửa & Xóa Truyện/Chương:**
+  - Tách riêng trang `EditBook.jsx` (Gồm 3 section: Sửa thông tin sách, Quản lý/Xóa chương, Cập nhật file chương mới).
+  - Áp dụng cơ chế **Ghi đè file Word** khi cập nhật nội dung chương.
+  - **Xóa Truyện (Cascade Delete):** Xây dựng `DeleteBookModal.jsx` với 2 lớp cảnh báo. Tự động xóa toàn bộ chương trực thuộc trước khi xóa Book để chống rác Database.
+- **Thống kê Host (`HostStats.jsx`):** Đã sửa lỗi 404 do lệch thứ tự Router. API `getHostStats` sử dụng `Aggregation` của MongoDB để tính toán tổng View, tổng Chương và phân loại truyện theo Status.
+
+### B. Quản lý Người dùng & Phân quyền (Admin)
+- **Auto-Sync Supabase & MongoDB:** Viết hàm trợ thủ `getOrCreateMongoUser` trong `adminUserController.js`. Nếu Admin thao tác (Ban, Mute, Đổi Role) lên một user mới chỉ có trong Supabase mà chưa từng đăng nhập vào MongoDB, hệ thống sẽ tự động tạo Profile để chống lỗi 404.
+- **Đồng bộ hóa 2 bảng User:** Khi gọi `getOrCreateProfile`, hệ thống tự động tạo dữ liệu đồng thời trên 2 bảng `UserProfile` (lưu role, status) và `User` (lưu thư viện, lịch sử đọc) để đảm bảo toàn vẹn dữ liệu.
+- **Tối ưu UI Quản lý:** Đã fix lỗi CSS Flexbox (`items-start`) trong `UserTable.jsx` khiến các thẻ Badge trạng thái bị kéo dãn sai tỷ lệ.
+
+### C. Trải nghiệm người đọc (User/Reader)
+- **Hiển thị nội dung (`ReadChapter.jsx`):** Đã khắc phục lỗi hiển thị thẻ HTML thô (Raw HTML) bằng cách sử dụng `dangerouslySetInnerHTML` kết hợp class Tailwind CSS (`[&>p]:indent-8 [&>p]:mb-6`) để render văn bản bóc tách từ Word một cách thụt lề chuẩn, mượt mà.
+- **Tối ưu Header & Chống Infinite Loop:** Đã sửa lỗi gọi API `getOrCreateProfile` lặp vô tận chục lần mỗi giây. Nguyên nhân do bỏ Object `[user]` vào Dependency Array của `useEffect`. Đã tối ưu lại thành `[user?.id]` và gộp các lệnh dư thừa.
+
+---
+
+## 3. CÁC API ĐÃ XÂY DỰNG TRONG PHIÊN NÀY
+**Book Controller:**
+- `GET /api/books/host-stats`: Lấy thống kê của Host (Phải đặt trên route `/:idOrSlug`).
+- `PUT /api/books/:id`: Cập nhật thông tin cơ bản của truyện.
+- `DELETE /api/books/:id`: Xóa truyện & xóa luôn các chương liên quan.
+
+**Chapter Controller:**
+- `PUT /api/chapters/:id`: Cập nhật nội dung/số/tên chương. (Có check trùng số chương).
+- `DELETE /api/chapters`: Xóa hàng loạt chương (nhận array ID) và auto update lại biến `total_chapters` trong bảng Book.
+
+**Admin User Controller:**
+- `POST /api/users/:id/toggle-ban`: Khóa/Mở khóa User (có lý do, có ghi AuditLog).
+- `POST /api/users/:id/mute`: Cấm chat có thời hạn.
+
+---
+
+## 4. GHI CHÚ QUAN TRỌNG CHO AI / DEVELOPER KẾ TIẾP
+- Hệ thống Auth hiện tại ưu tiên Supabase làm gốc (Nắm giữ Token/Session). MongoDB đóng vai trò lưu trữ Profile phụ (Role, Coins, Config). Mọi tương tác tìm kiếm User chéo giữa 2 bảng đều dựa vào field `supabaseId`.
+- Cấu hình Axios (`axiosConfig.js`) đã có sẵn Interceptor để tự động nhét Bearer Token vào header, đồng thời tự động bắt lỗi 403 (ACCOUNT_BANNED) để văng Toast, xóa localStorage và force Sign Out. Không cần phải tự viết check Banned lắt nhắt ở từng Component Frontend.

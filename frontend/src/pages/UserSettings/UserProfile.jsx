@@ -1,25 +1,26 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../supabaseClient';
 import { toast } from 'react-toastify';
-import { FaSave, FaUserCircle, FaKey } from 'react-icons/fa'; // Đã bỏ FaCamera theo yêu cầu
+import { FaSave, FaUserCircle, FaKey, FaCamera } from 'react-icons/fa';
+// ĐÃ THÊM DÒNG IMPORT API DƯỚI ĐÂY ĐỂ FIX LỖI:
+import api from '../../services/axiosConfig';
 
 const UserProfile = () => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [changingPassword, setChangingPassword] = useState(false);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [userAuth, setUserAuth] = useState(null);
 
-    // State chứa thông tin profile (Thêm role)
     const [profile, setProfile] = useState({
         username: '',
         email: '',
         display_name: '',
         avatar_url: '',
         bio: '',
-        role: 'user' // Mặc định là user
+        role: ''
     });
 
-    // State đổi mật khẩu
     const [passData, setPassData] = useState({
         currentPassword: '',
         newPassword: '',
@@ -40,22 +41,36 @@ const UserProfile = () => {
             }
             setUserAuth(user);
 
-            const { data, error } = await supabase
+            // 1. Lấy dữ liệu hiển thị từ Supabase (Avatar, Display Name, Bio)
+            const { data: spData, error: spError } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', user.id)
                 .single();
 
-            if (error) throw error;
+            if (spError) throw spError;
 
-            if (data) {
+            // 2. Lấy phân quyền (Role) chuẩn xác từ MongoDB
+            let actualRole = 'user';
+            try {
+                const response = await api.get('/users/me/profile');
+                const mongoProfile = response?.profile || response?.data?.profile;
+                if (mongoProfile && mongoProfile.role) {
+                    actualRole = mongoProfile.role;
+                }
+            } catch (mongoError) {
+                console.error('Không thể lấy role từ MongoDB:', mongoError);
+            }
+
+            // 3. Gộp dữ liệu và cập nhật State
+            if (spData) {
                 setProfile({
-                    username: data.username || '',
-                    email: data.email?.includes('@lovetruyen.local') ? '' : data.email,
-                    display_name: data.display_name || '',
-                    avatar_url: data.avatar_url || '',
-                    bio: data.bio || '',
-                    role: data.role || 'user' // Bóc tách role từ DB
+                    username: spData.username || '',
+                    email: spData.email?.includes('@lovetruyen.local') ? '' : spData.email,
+                    display_name: spData.display_name || '',
+                    avatar_url: spData.avatar_url || '',
+                    bio: spData.bio || '',
+                    role: actualRole // Đã thay thế role ảo bằng role thật từ MongoDB
                 });
             }
         } catch (error) {
@@ -74,6 +89,66 @@ const UserProfile = () => {
         setPassData({ ...passData, [e.target.name]: e.target.value });
     };
 
+    const handleAvatarUpload = async (event) => {
+        try {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (file.size > 2 * 1024 * 1024) {
+                return toast.error("Kích thước ảnh quá lớn. Vui lòng chọn ảnh dưới 2MB!");
+            }
+
+            setUploadingAvatar(true);
+
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = async () => {
+                const base64String = reader.result;
+
+                try {
+                    const response = await api.post('/users/upload-avatar', {
+                        file_name: file.name,
+                        file_base64: base64String
+                    });
+
+                    const newAvatarUrl = response?.avatar_url || response?.data?.avatar_url;
+                    if (!newAvatarUrl) throw new Error("Không nhận được link ảnh từ server");
+
+                    const { error: updateError } = await supabase
+                        .from('profiles')
+                        .update({
+                            avatar_url: newAvatarUrl,
+                            updated_at: new Date()
+                        })
+                        .eq('id', userAuth.id);
+
+                    if (updateError) throw updateError;
+
+                    setProfile(prev => ({ ...prev, avatar_url: newAvatarUrl }));
+                    toast.success("Cập nhật ảnh đại diện thành công!");
+
+                } catch (err) {
+                    console.error("Lỗi cập nhật ảnh:", err);
+                    toast.error(err.response?.data?.error || err.message || "Lỗi tải ảnh lên!");
+                } finally {
+                    setUploadingAvatar(false);
+                    event.target.value = '';
+                }
+            };
+
+            reader.onerror = () => {
+                toast.error("Lỗi khi đọc file ảnh từ thiết bị!");
+                setUploadingAvatar(false);
+            };
+
+        } catch (error) {
+            console.error("Lỗi xử lý file:", error);
+            toast.error("Đã xảy ra lỗi khi chọn ảnh!");
+            setUploadingAvatar(false);
+            event.target.value = '';
+        }
+    };
+
     const handleUpdateProfile = async (e) => {
         e.preventDefault();
         setSaving(true);
@@ -82,7 +157,6 @@ const UserProfile = () => {
                 .from('profiles')
                 .update({
                     display_name: profile.display_name,
-                    avatar_url: profile.avatar_url,
                     bio: profile.bio,
                     updated_at: new Date()
                 })
@@ -132,7 +206,6 @@ const UserProfile = () => {
         || userAuth?.app_metadata?.providers?.includes('google')
         || userAuth?.identities?.some((identity) => identity?.provider === 'google');
 
-    // Logic tô màu Badge phân quyền
     const getRoleBadgeColor = (role) => {
         switch(role) {
             case 'admin': return 'bg-red-100 text-red-700 border-red-200';
@@ -141,6 +214,14 @@ const UserProfile = () => {
         }
     };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////Bên dưới là phần html/////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     if (loading) return <div className="text-center p-10">Đang tải hồ sơ...</div>;
 
     return (
@@ -148,22 +229,42 @@ const UserProfile = () => {
             <h1 className="text-3xl font-bold text-indigo-700 mb-6 border-b pb-4">Quản Lý Hồ Sơ</h1>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {/* CỘT TRÁI */}
                 <div className="col-span-1">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border text-center sticky top-24">
-                        <div className="relative inline-block mb-4 group">
-                            <img 
-                                src={profile.avatar_url || "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDE1MCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxNTAiIGhlaWdodD0iMTUwIiBmaWxsPSIjZTVlN2ViIi8+CjxjaXJjbGUgY3g9Ijc1IiBjeT0iNjAiIHI9IjIwIiBmaWxsPSIjNmI3MjgwIi8+CjxwYXRoIGQ9Ik00NSAxMjVIMTA1VjEzMUMxMDUgMTQwLjggOTcuOCAxNDggODggMTQ4SDYyQzUyLjIgMTQ4IDQ1IDE0MC44IDQ1IDEzMVYxMjVaIiBmaWxsPSIjNmI3MjgwIi8+Cjx0ZXh0IHg9Ijc1IiB5PSIxMzAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzZiNzI4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+QXZhdGFyPC90ZXh0Pgo8L3N2Zz4="} 
-                                alt="Avatar" 
-                                className="w-32 h-32 rounded-full object-cover border-4 border-indigo-100 mx-auto shadow-md"
-                            />
+                        <div className="mb-5">
+                            <div className="relative inline-block">
+                                <img 
+                                    src={profile.avatar_url || "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDE1MCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxNTAiIGhlaWdodD0iMTUwIiBmaWxsPSIjZTVlN2ViIi8+CjxjaXJjbGUgY3g9Ijc1IiBjeT0iNjAiIHI9IjIwIiBmaWxsPSIjNmI3MjgwIi8+CjxwYXRoIGQ9Ik00NSAxMjVIMTA1VjEzMUMxMDUgMTQwLjggOTcuOCAxNDggODggMTQ4SDYyQzUyLjIgMTQ4IDQ1IDE0MC44IDQ1IDEzMVYxMjVaIiBmaWxsPSIjNmI3MjgwIi8+Cjx0ZXh0IHg9Ijc1IiB5PSIxMzAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzZiNzI4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+QXZhdGFyPC90ZXh0Pgo8L3N2Zz4="} 
+                                    alt="Avatar" 
+                                    className={`w-32 h-32 rounded-full object-cover border-4 border-indigo-100 mx-auto shadow-md transition-opacity ${uploadingAvatar ? 'opacity-40' : ''}`}
+                                />
+                                {uploadingAvatar && (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="mt-4">
+                                <label className="cursor-pointer inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-bold rounded-lg transition border border-indigo-200 shadow-sm w-full">
+                                    <FaCamera size={16} />
+                                    <span>Đổi ảnh đại diện</span>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={handleAvatarUpload}
+                                        disabled={uploadingAvatar}
+                                    />
+                                </label>
+                            </div>
                         </div>
+
                         <h2 className="text-xl font-bold text-gray-800">{profile.display_name || "Vô danh"}</h2>
                         <p className="text-indigo-600 font-medium text-sm mb-2">
                             {profile.username ? `@${profile.username}` : "Google Account"}
                         </p>
                         
-                        {/* BADGE THỂ HIỆN CHỨC VỤ */}
                         <span className={`inline-block px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full border ${getRoleBadgeColor(profile.role)}`}>
                             {profile.role}
                         </span>
@@ -174,7 +275,6 @@ const UserProfile = () => {
                     </div>
                 </div>
 
-                {/* CỘT PHẢI */}
                 <div className="col-span-2 space-y-6">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border">
                         <h3 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2 border-b pb-2">
@@ -192,14 +292,12 @@ const UserProfile = () => {
                                     <input type="text" value={profile.email || "Đăng nhập bằng Username"} disabled className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed text-sm" />
                                 </div>
                             </div>
+                            
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Tên hiển thị (Display Name)</label>
                                 <input type="text" name="display_name" value={profile.display_name} onChange={handleProfileChange} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition" />
                             </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Link Ảnh đại diện</label>
-                                <input type="text" name="avatar_url" value={profile.avatar_url} onChange={handleProfileChange} placeholder="https://imgur.com/..." className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition" />
-                            </div>
+
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Giới thiệu (Bio)</label>
                                 <textarea name="bio" value={profile.bio} onChange={handleProfileChange} rows="3" className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition"></textarea>
@@ -220,13 +318,7 @@ const UserProfile = () => {
                             <form onSubmit={handleChangePassword} className="space-y-4">
                                 <div>
                                     <label className="block text-sm font-semibold text-gray-700 mb-1">Nhập mật khẩu cũ</label>
-                                    <input
-                                        type="password"
-                                        name="currentPassword"
-                                        value={passData.currentPassword}
-                                        onChange={handlePassChange}
-                                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                                    />
+                                    <input type="password" name="currentPassword" value={passData.currentPassword} onChange={handlePassChange} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition" />
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>

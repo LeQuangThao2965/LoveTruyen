@@ -12,13 +12,10 @@ import DeleteBookModal from './DeleteBookModal';
 const PLACEHOLDER_COVER = 'https://placehold.co/120x160/e5e7eb/6b7280?text=No+Cover';
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
 const BASE_GENRES = [
-    'Fantasy',
-    'Hiện đại',
-    'Sci-fi',
-    'Romance',
-    'Cổ Trang',
-    'Kiếm Hiệp',
-    'Tu Tiên'
+    'Fantasy', 'Hiện đại', 'Sci-fi', 'Romance', 'Cổ Trang', 'Kiếm Hiệp', 'Tu Tiên', 'Tiên Hiệp', 
+    'Xuyên Không', 'Hệ Thống', 'Đồng Nhân', 'Dị Năng', 'Hài Hước', 'Kinh Dị', 
+    'Trinh Thám', 'Thể Thao', 'Võ Thuật', 'Học Đường', 'Đam Mỹ', 'Bách Hợp',
+    'Huyền Huyễn', 'Ngôn Tình'
 ];
 
 const normalizeGenreKey = (value = '') =>
@@ -432,7 +429,7 @@ const MyBooks = () => {
                                                     </button>
 
                                                     <Link
-                                                        to={`/host/edit-book/${book.slug || book._id}`}
+                                                        to={`/host/edit-book/${book._id}`}
                                                         className="p-2 text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition inline-flex items-center justify-center"
                                                         title="Cập nhật truyện"
                                                     >

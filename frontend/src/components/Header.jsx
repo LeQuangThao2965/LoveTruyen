@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import api from '../services/axiosConfig';
 import AuthModal from './AuthModal'; 
+import { FaHeart } from 'react-icons/fa';
 
 // Bộ Icon SVG tinh tế hơn (Đã xóa Settings, thêm Icon Admin & Host)
 const Icons = {
@@ -79,6 +80,10 @@ const Header = () => {
     const [suggestions, setSuggestions] = useState([]);
     const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
     const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
+
+    //state hiển thị display name & avatar
+    const [displayName, setDisplayName] = useState('');
+    const [avatarUrl, setAvatarUrl] = useState('');
     
     // State cho Dropdown
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -148,11 +153,13 @@ const Header = () => {
             // Nếu chưa đăng nhập (không có ID) thì set Role mặc định và dừng lại
             if (!user?.id) {
                 setUserRole('user');
+                setDisplayName('');
+                setAvatarUrl('');
                 return;
             }
 
             try {
-                // Gọi API lấy profile TỪ MONGODB (Đúng 1 lần duy nhất)
+                //1. Gọi API lấy role từ MongoDB
                 const response = await api.get('/users/me/profile');
                 
                 // Lưu ý: response từ axios thường nằm trong data, 
@@ -162,6 +169,19 @@ const Header = () => {
                 // Cập nhật role
                 if (profile?.role) {
                     setUserRole(profile.role);
+                }
+
+                // 2. Gọi Supabase lấy display_name và avatar mới nhất
+                const { data: spProfile } = await supabase
+                    .from('profiles')
+                    .select('display_name, avatar_url, username')
+                    .eq('id', user.id)
+                    .single();
+
+                if (spProfile) {
+                    // Ưu tiên: display_name -> username -> tên từ google
+                    setDisplayName(spProfile.display_name || spProfile.username || user.user_metadata?.full_name);
+                    setAvatarUrl(spProfile.avatar_url);
                 }
             } catch (err) {
                 console.error('[Header] Failed to fetch profile from MongoDB:', err);
@@ -480,7 +500,7 @@ const Header = () => {
                                 >
                                     {user ? (
                                         <img 
-                                            src={getAvatarUrl(user)} 
+                                            src={avatarUrl} 
                                             alt="Avatar" 
                                             className="w-8 h-8 rounded-full object-cover border border-gray-200 shadow-sm"
                                             onError={(e) => { e.target.onerror = null; e.target.src = "https://ui-avatars.com/api/?name=U&background=gray&color=fff"; }}
@@ -503,13 +523,23 @@ const Header = () => {
                                     <div className="px-4 py-3 border-b border-gray-50 bg-gray-50/50">
                                         <p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Xin chào</p>
                                         <p className="text-sm font-semibold text-gray-800 truncate">
-                                            {user.user_metadata?.full_name || user.email}
+                                            {displayName || user.user_metadata?.full_name || user.email}
                                         </p>
                                     </div>
 
                                     {/* Link mặc định ai cũng có */}
                                     <Link to="/profile" onClick={() => setIsDropdownOpen(false)} className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition">
                                         <Icons.Profile /> Hồ sơ cá nhân
+                                    </Link>
+
+                                    {/* Nút Tủ sách của tôi (Mẫu 1 - Đồng bộ) */}
+                                    <Link 
+                                        to="/favorites" 
+                                        onClick={() => setIsDropdownOpen(false)} 
+                                        className="group flex items-center px-4 py-2.5 text-sm text-gray-700 transition-all hover:bg-indigo-50 hover:text-indigo-600"
+                                    >
+                                        <FaHeart className="mr-3 text-lg text-gray-400 transition-colors group-hover:text-indigo-600" /> 
+                                        Tủ sách của tôi
                                     </Link>
 
                                     {/* Render theo Role */}
@@ -526,9 +556,6 @@ const Header = () => {
                                             </Link>
                                             <Link to="host/my-books?openUpload=1" onClick={() => setIsDropdownOpen(false)} className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 hover:text-green-600 transition">
                                                 <Icons.Upload /> Đăng truyện
-                                            </Link>
-                                            <Link to="host/my-books" onClick={() => setIsDropdownOpen(false)} className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition">
-                                                <Icons.BookList /> Quản lý truyện đã đăng
                                             </Link>
                                         </>
                                     )}

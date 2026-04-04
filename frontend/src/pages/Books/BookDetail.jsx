@@ -4,6 +4,9 @@ import { FaBookOpen, FaClock, FaListOl, FaUserEdit } from 'react-icons/fa';
 import api from '../../services/axiosConfig';
 import MockComments from '../../components/MockComments';
 
+import { FaHeart, FaRegHeart } from 'react-icons/fa';
+import { toast } from 'react-toastify'; // Để hiện thông báo
+
 const CHAPTERS_PER_PAGE = 50;
 const COVER_PLACEHOLDER = 'https://placehold.co/280x360/e5e7eb/6b7280?text=No+Cover';
 
@@ -38,6 +41,9 @@ const BookDetail = () => {
     const [loadingBook, setLoadingBook] = useState(true);
     const [loadingChapters, setLoadingChapters] = useState(true);
     const [errorMessage, setErrorMessage] = useState('');
+
+    const [isFavorited, setIsFavorited] = useState(false);
+    const [loadingFav, setLoadingFav] = useState(false);
 
     const fetchBook = useCallback(async () => {
         setLoadingBook(true);
@@ -91,10 +97,56 @@ const BookDetail = () => {
         if (chapterTotal === 0) return 'Chua co chuong';
         return `${chapterTotal} chuong`;
     }, [chapterTotal]);
+    //////////////////////////////////////////////////////////////////////////
+
+    const checkFavoriteStatus = useCallback(async (actualBookId) => {
+        if (!actualBookId) return; // Nếu chưa có ID thật thì không làm gì cả
+        try {
+            const res = await api.get(`/favorites/check/${actualBookId}`);
+            setIsFavorited(res.isFavorited);
+        } catch (error) {
+            console.log("Chưa đăng nhập hoặc lỗi check favorite");
+        }
+    }, []);
+    
+    /////////////////////////////////////////////////////////////////////
+    // useEffect 1: Chạy 1 lần duy nhất lúc mới vào trang để lấy thông tin truyện
+    useEffect(() => {
+        setChapterPage(1);
+        setErrorMessage('');
+        fetchBook();
+        fetchChapters(1);
+    }, [fetchBook, fetchChapters]);
+
+    // useEffect 2: Theo dõi biến 'book', cứ khi nào lấy được book._id thật thì mới check favorite
+    useEffect(() => {
+        if (book && book._id) {
+            checkFavoriteStatus(book._id);
+        }
+    }, [book, checkFavoriteStatus]);
+    /////////////////////////////////////////////////////////////////////
 
     if (loadingBook) {
         return <div className="container mx-auto max-w-6xl p-4">Dang tai chi tiet truyen...</div>;
     }
+
+    const handleToggleFavorite = async () => {
+        setLoadingFav(true);
+        try {
+            const res = await api.post('/favorites/toggle', { bookId: book._id });
+            setIsFavorited(res.isFavorited);
+            if (res.isFavorited) {
+                toast.success('Đã thêm vào tủ sách!');
+            } else {
+                toast.info('Đã bỏ theo dõi.');
+            }
+        } catch (error) {
+            toast.error('Vui lòng đăng nhập để sử dụng tính năng này!');
+        } finally {
+            setLoadingFav(false);
+        }
+    };
+    //////////////////////////////////////////////////////////////////////////
 
     if (!book) {
         return (
@@ -111,6 +163,7 @@ const BookDetail = () => {
     return (
         <div className="container mx-auto max-w-6xl space-y-5 p-4">
             <section className="grid gap-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:grid-cols-[220px_1fr]">
+                {/* Cột 1: Ảnh bìa (Giữ nguyên) */}
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-100">
                     <img
                         src={book?.cover_url || COVER_PLACEHOLDER}
@@ -124,7 +177,8 @@ const BookDetail = () => {
                     />
                 </div>
 
-                <div className="space-y-3">
+                {/* Cột 2: Nội dung - Đã thêm relative flex flex-col để đẩy nút xuống đáy */}
+                <div className="relative flex flex-col space-y-3 pb-12"> 
                     <h1 className="text-3xl font-extrabold text-gray-900">{book?.title || '--'}</h1>
 
                     <div className="grid gap-2 text-sm text-gray-700 md:grid-cols-2">
@@ -162,6 +216,20 @@ const BookDetail = () => {
                     <div className="rounded-xl bg-gray-50 p-4 text-sm leading-7 text-gray-700">
                         {book?.description || 'Chua co mo ta cho truyen nay.'}
                     </div>
+
+                    {/* NÚT THEO DÕI: Nằm ở góc dưới bên phải */}
+                    <button
+                        onClick={handleToggleFavorite}
+                        disabled={loadingFav}
+                        className={`absolute bottom-0 right-0 flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold shadow-sm transition-all ${
+                            isFavorited 
+                            ? 'bg-rose-100 text-rose-600 hover:bg-rose-200' 
+                            : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                        }`}
+                    >
+                        {isFavorited ? <FaHeart className="text-lg" /> : <FaRegHeart className="text-lg" />}
+                        {isFavorited ? 'Đã Theo dõi' : 'Theo dõi'}
+                    </button>
                 </div>
             </section>
 
@@ -241,11 +309,14 @@ const BookDetail = () => {
                 )}
             </section>
 
-            <MockComments
-                storageKey={`mock_comments_book_${bookId}`}
-                title="Binh luan truyện (frontend tam)"
-                placeholder="Nhap binh luan cho truyen nay..."
-            />
+            {/* ĐÃ SỬA: Bọc điều kiện book._id để chống lỗi 500 do Slug */}
+            {book?._id && (
+                <MockComments
+                    bookId={book._id}
+                    title="Bình luận truyện"
+                    placeholder="Nhập bình luận cho truyện này..."
+                />
+            )}
         </div>
     );
 };

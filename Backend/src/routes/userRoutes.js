@@ -33,4 +33,7 @@ router.post('/:id/toggle-ban', adminUserController.toggleBanUser);
 router.post('/:id/mute', adminUserController.muteUser);
 router.post('/:id/unmute', adminUserController.unmuteUser);
 
+// Thêm API Upload Avatar cho user (Cần verifyToken để đảm bảo chỉ người đã đăng nhập mới được up)
+router.post('/upload-avatar', verifyToken, userController.uploadAvatar);
+
 module.exports = router;

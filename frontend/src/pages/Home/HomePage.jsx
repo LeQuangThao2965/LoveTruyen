@@ -176,7 +176,8 @@ const HomePage = () => {
     const dragStateRef = useRef({
         isDragging: false,
         startX: 0,
-        startScrollLeft: 0
+        startScrollLeft: 0,
+        hasDragged: false
     });
 
     const hotLoopBooks = useMemo(() => {
@@ -311,12 +312,10 @@ const HomePage = () => {
         dragStateRef.current = {
             isDragging: true,
             startX: event.clientX,
-            startScrollLeft: container.scrollLeft
+            startScrollLeft: container.scrollLeft,
+            hasDragged: false // Reset lại mỗi khi bấm chuột xuống
         };
-
-        if (typeof container.setPointerCapture === 'function') {
-            container.setPointerCapture(event.pointerId);
-        }
+        // Đã xóa container.setPointerCapture(event.pointerId) gây lỗi
     };
 
     const handleHotPointerMove = (event) => {
@@ -325,23 +324,28 @@ const HomePage = () => {
         if (!container || !dragState.isDragging) return;
 
         const deltaX = event.clientX - dragState.startX;
+        
+        // Nếu chuột di chuyển quá 5px, ta xác nhận đây là hành động Kéo (Drag), không phải Click
+        if (Math.abs(deltaX) > 5) {
+            dragState.hasDragged = true;
+        }
+
         container.scrollLeft = dragState.startScrollLeft - deltaX;
         normalizeHotScrollLoop();
     };
 
     const handleHotPointerUp = (event) => {
-        const container = hotScrollRef.current;
-        if (!container) return;
-
         dragStateRef.current.isDragging = false;
-        if (
-            typeof container.releasePointerCapture === 'function'
-            && typeof container.hasPointerCapture === 'function'
-            && container.hasPointerCapture(event.pointerId)
-        ) {
-            container.releasePointerCapture(event.pointerId);
-        }
+        // Đã xóa container.releasePointerCapture(event.pointerId)
         normalizeHotScrollLoop();
+    };
+
+    // HÀM MỚI: Nếu người dùng đang kéo truyện, ta sẽ chặn sự kiện click vào Link
+    const handleClickCapture = (event) => {
+        if (dragStateRef.current.hasDragged) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
     };
 
     const goToPrevNewPage = () => {
@@ -351,6 +355,8 @@ const HomePage = () => {
     const goToNextNewPage = () => {
         setNewPage((prev) => Math.min(newTotalPages, prev + 1));
     };
+
+    
 
     return (
         <div className="container mx-auto space-y-8 p-4">
@@ -415,13 +421,17 @@ const HomePage = () => {
                 ) : (
                     <div
                         ref={hotScrollRef}
-                        className="cursor-grab overflow-x-auto pb-2 [scrollbar-width:none] active:cursor-grabbing [&::-webkit-scrollbar]:hidden"
+                        // Thêm class select-none để chống bôi đen chữ khi kéo
+                        className="cursor-grab overflow-x-auto pb-2 [scrollbar-width:none] active:cursor-grabbing [&::-webkit-scrollbar]:hidden select-none"
                         onPointerDown={handleHotPointerDown}
                         onPointerMove={handleHotPointerMove}
                         onPointerUp={handleHotPointerUp}
                         onPointerCancel={handleHotPointerUp}
                         onPointerLeave={handleHotPointerUp}
                         onScroll={normalizeHotScrollLoop}
+                        // THÊM 2 DÒNG DƯỚI ĐÂY:
+                        onClickCapture={handleClickCapture} 
+                        onDragStart={(e) => e.preventDefault()} // Chống trình duyệt tự tạo bóng mờ ảo khi kéo ảnh
                     >
                         <div ref={hotTrackRef} className="flex min-w-max gap-3">
                             {hotLoopBooks.map((book, index) => (

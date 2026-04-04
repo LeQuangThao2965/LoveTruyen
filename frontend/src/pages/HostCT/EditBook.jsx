@@ -2,10 +2,15 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../../services/axiosConfig';
-import * as mammoth from 'mammoth'; // Dùng mammoth thay cho react-quill
-import { FaArrowLeft, FaTrash, FaEdit, FaSave, FaExclamationTriangle, FaFileUpload } from 'react-icons/fa';
+import * as mammoth from 'mammoth';
+import { FaArrowLeft, FaTrash, FaEdit, FaSave, FaExclamationTriangle, FaFileUpload, FaCamera } from 'react-icons/fa'; // Thêm FaCamera
 
-const BASE_GENRES = ['Fantasy', 'Hiện đại', 'Sci-fi', 'Romance', 'Cổ Trang', 'Kiếm Hiệp', 'Tu Tiên'];
+const BASE_GENRES = [
+    'Fantasy', 'Hiện đại', 'Sci-fi', 'Romance', 'Cổ Trang', 'Kiếm Hiệp', 'Tu Tiên', 'Tiên Hiệp', 
+    'Xuyên Không', 'Hệ Thống', 'Đồng Nhân', 'Dị Năng', 'Hài Hước', 'Kinh Dị', 
+    'Trinh Thám', 'Thể Thao', 'Võ Thuật', 'Học Đường', 'Đam Mỹ', 'Bách Hợp',
+    'Huyền Huyễn', 'Ngôn Tình'
+];
 const STATUS_OPTIONS = ['Đang cập nhật', 'Hoàn thành', 'Tạm hoãn'];
 
 const EditBook = () => {
@@ -15,19 +20,20 @@ const EditBook = () => {
     // 1. STATE QUẢN LÝ DỮ LIỆU
     const [loading, setLoading] = useState(true);
     const [savingBook, setSavingBook] = useState(false);
+    const [coverFile, setCoverFile] = useState(null); // State quản lý file ảnh up lên
     
     // State Section 1: Thông tin sách
     const [bookData, setBookData] = useState({
-        title: '', author: '', description: '', cover_url: '', status: 'Đang cập nhật', genres: []
+        _id: '', title: '', author: '', description: '', cover_url: '', status: 'Đang cập nhật', genres: []
     });
 
-    // State Section 2: Quản lý chương
+    // State Section 2
     const [chapters, setChapters] = useState([]);
     const [selectedChapters, setSelectedChapters] = useState([]); 
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
-    // State Section 3: Sửa nội dung chương (Đã tối ưu cho File Upload)
+    // State Section 3
     const [editingChapter, setEditingChapter] = useState(null); 
     const [savingChapter, setSavingChapter] = useState(false);
     const [extractingEdit, setExtractingEdit] = useState(false);
@@ -39,13 +45,23 @@ const EditBook = () => {
             try {
                 const bookRes = await api.get(`/books/${bookId}`);
                 if (bookRes?.book) {
+                    // XỬ LÝ GENRES: Đảm bảo nó luôn là một Mảng (Array) để UI nhận diện được
+                    let parsedGenres = [];
+                    if (Array.isArray(bookRes.book.genres)) {
+                        parsedGenres = bookRes.book.genres;
+                    } else if (bookRes.book.genres && typeof bookRes.book.genres === 'object') {
+                        // Phòng hờ trường hợp DB trả về Object {0: "A", 1: "B"}
+                        parsedGenres = Object.values(bookRes.book.genres);
+                    }
+
                     setBookData({
+                        _id: bookRes.book._id || '',
                         title: bookRes.book.title || '',
                         author: bookRes.book.author || '',
                         description: bookRes.book.description || '',
                         cover_url: bookRes.book.cover_url || '',
                         status: bookRes.book.status || 'Đang cập nhật',
-                        genres: bookRes.book.genres || []
+                        genres: parsedGenres
                     });
                 }
 
@@ -63,7 +79,24 @@ const EditBook = () => {
         fetchBookAndChapters();
     }, [bookId, navigate]);
 
+    // ====================================================================
     // 3. LOGIC SECTION 1: CẬP NHẬT TRUYỆN
+    // ====================================================================
+    
+    // Hàm xử lý chọn ảnh từ máy
+    const handleCoverChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setCoverFile(file);
+            // Tạo preview ảnh ngay lập tức
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setBookData(prev => ({ ...prev, cover_url: reader.result }));
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
     const handleGenreToggle = (genre) => {
         setBookData(prev => ({
             ...prev,
@@ -77,18 +110,54 @@ const EditBook = () => {
         if (!bookData.title.trim() || !bookData.author.trim()) {
             return toast.error("Tên truyện và Tác giả không được để trống!");
         }
+        
         setSavingBook(true);
         try {
-            await api.put(`/books/${bookId}`, bookData);
+            let finalCoverUrl = bookData.cover_url;
+
+            // Nếu người dùng có chọn ảnh mới, gọi API up ảnh Base64 trước
+            if (coverFile) {
+                const base64String = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(coverFile);
+                    reader.onload = () => resolve(reader.result);
+                });
+
+                // Tận dụng lại API uploadBookCover có sẵn trong Backend của bạn
+                const uploadRes = await api.post('/books/upload-cover', {
+                    file_name: coverFile.name,
+                    file_base64: base64String
+                });
+
+                finalCoverUrl = uploadRes.cover_url || uploadRes.data?.cover_url;
+            }
+
+            // Đóng gói JSON gửi lên API Update
+            const payload = {
+                title: bookData.title,
+                author: bookData.author,
+                description: bookData.description,
+                status: bookData.status,
+                genres: bookData.genres, // Gửi nguyên cái mảng lên, Backend tự xử lý được
+                cover_url: finalCoverUrl
+            };
+
+            const updateId = bookData._id || bookId;
+            await api.put(`/books/${updateId}`, payload);
+
             toast.success("Cập nhật thông tin truyện thành công!");
+            setCoverFile(null); // Reset file sau khi lưu
         } catch (error) {
-            toast.error("Lỗi khi cập nhật truyện!");
+            console.error(error);
+            toast.error(error?.response?.data?.message || "Lỗi khi cập nhật truyện!");
         } finally {
             setSavingBook(false);
         }
     };
 
+    // ====================================================================
     // 4. LOGIC SECTION 2: CHỌN & XÓA CHƯƠNG
+    // ====================================================================
     const handleSelectChapter = (chapterId) => {
         setSelectedChapters(prev => 
             prev.includes(chapterId) ? prev.filter(id => id !== chapterId) : [...prev, chapterId]
@@ -109,7 +178,6 @@ const EditBook = () => {
             await api.delete('/chapters', { data: { chapterIds: selectedChapters } });
             setChapters(prev => prev.filter(ch => !selectedChapters.includes(ch._id)));
             
-            // Tính toàn vẹn: Đóng form sửa nếu chương đang sửa bị xóa
             if (editingChapter && selectedChapters.includes(editingChapter._id)) {
                 setEditingChapter(null);
             }
@@ -124,12 +192,14 @@ const EditBook = () => {
         }
     };
 
+    // ====================================================================
     // 5. LOGIC SECTION 3: XỬ LÝ UPLOAD FILE ĐỂ SỬA CHƯƠNG
+    // ====================================================================
     const handleStartEditChapter = (chapter) => {
         setEditingChapter({
             _id: chapter._id,
             chapter_number: chapter.chapter_number,
-            original_number: chapter.chapter_number, // Lưu lại số cũ để hiển thị tiêu đề
+            original_number: chapter.chapter_number, 
             title: chapter.title,
             content: chapter.content,
             fileName: null
@@ -151,7 +221,6 @@ const EditBook = () => {
         setExtractingEdit(true);
 
         try {
-            // A. Bóc tách Tên file (Regex như phần AddChapter)
             const nameWithoutExt = file.name.replace(/\.docx$/i, '');
             const regex = /^(\d+(?:\.\d+)?)\s*-\s*(.*)$/;
             const match = nameWithoutExt.match(regex);
@@ -166,7 +235,6 @@ const EditBook = () => {
                 toast.warning('Tên file không đúng chuẩn "Số - Tên". Hệ thống chỉ cập nhật nội dung, giữ nguyên số và tên chương cũ.');
             }
 
-            // B. Bóc tách Nội dung bằng Mammoth
             const arrayBuffer = await file.arrayBuffer();
             const result = await mammoth.convertToHtml({ arrayBuffer });
             const newContent = result.value;
@@ -177,7 +245,6 @@ const EditBook = () => {
                 return;
             }
 
-            // Cập nhật State với dữ liệu mới
             setEditingChapter(prev => ({
                 ...prev,
                 chapter_number: newNumber,
@@ -192,7 +259,7 @@ const EditBook = () => {
             toast.error('Lỗi hệ thống khi đọc file Word.');
         } finally {
             setExtractingEdit(false);
-            e.target.value = null; // Reset input file để có thể chọn lại cùng 1 file nếu cần
+            e.target.value = null; 
         }
     };
 
@@ -245,41 +312,78 @@ const EditBook = () => {
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">Tên Truyện</label>
-                        <input type="text" value={bookData.title} onChange={e => setBookData({...bookData, title: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">Tác Giả</label>
-                        <input type="text" value={bookData.author} onChange={e => setBookData({...bookData, author: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">Link Ảnh Bìa (URL)</label>
-                        <input type="text" value={bookData.cover_url} onChange={e => setBookData({...bookData, cover_url: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">Trạng Thái</label>
-                        <select value={bookData.status} onChange={e => setBookData({...bookData, status: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
-                            {STATUS_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
-                        </select>
-                    </div>
-                    <div className="md:col-span-2">
-                        <label className="block text-sm font-bold text-gray-700 mb-2">Thể Loại</label>
-                        <div className="flex flex-wrap gap-2">
-                            {BASE_GENRES.map(genre => (
-                                <button 
-                                    key={genre} onClick={() => handleGenreToggle(genre)}
-                                    className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${bookData.genres.includes(genre) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
-                                >
-                                    {genre}
-                                </button>
-                            ))}
+                <div className="flex flex-col md:flex-row gap-8">
+                    {/* CỘT 1: CHỌN ẢNH BÌA */}
+                    <div className="w-full md:w-1/3 flex flex-col items-center">
+                        <label className="block text-sm font-bold text-gray-700 mb-3 w-full text-left">Ảnh Bìa Truyện</label>
+                        <div className="relative group mb-4">
+                            <img 
+                                src={bookData.cover_url || "https://placehold.co/400x600?text=No+Cover"} 
+                                alt="Cover Preview" 
+                                className="w-[200px] h-[300px] object-cover rounded-xl shadow-lg border-2 border-indigo-100 mx-auto"
+                                onError={(e) => {
+                                    e.target.onerror = null; 
+                                    e.target.src = "https://placehold.co/400x600?text=Error+Load";
+                                }}
+                            />
+                            {coverFile && (
+                                <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full font-bold shadow-md">Mới</div>
+                            )}
+                        </div>
+                        
+                        <div className="w-full">
+                            <label className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg transition border border-indigo-200 shadow-sm w-full text-center active:scale-95">
+                                <FaCamera size={18} />
+                                <span>{coverFile ? "Đổi ảnh khác" : "Đổi ảnh bìa từ thiết bị"}</span>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleCoverChange}
+                                />
+                            </label>
                         </div>
                     </div>
-                    <div className="md:col-span-2">
-                        <label className="block text-sm font-bold text-gray-700 mb-2">Giới Thiệu (Mô tả)</label>
-                        <textarea rows="4" value={bookData.description} onChange={e => setBookData({...bookData, description: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+
+                    {/* CỘT 2: THÔNG TIN VĂN BẢN & THỂ LOẠI */}
+                    <div className="w-full md:w-2/3 grid grid-cols-1 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">Tên Truyện</label>
+                                <input type="text" value={bookData.title} onChange={e => setBookData({...bookData, title: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">Tác Giả</label>
+                                <input type="text" value={bookData.author} onChange={e => setBookData({...bookData, author: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Trạng Thái</label>
+                            <select value={bookData.status} onChange={e => setBookData({...bookData, status: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                                {STATUS_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Thể Loại</label>
+                            <div className="flex flex-wrap gap-2 p-3 border rounded-xl bg-gray-50/50">
+                                {BASE_GENRES.map(genre => (
+                                    <button 
+                                        key={genre} 
+                                        type="button"
+                                        onClick={() => handleGenreToggle(genre)}
+                                        className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition shadow-sm ${bookData.genres.includes(genre) ? 'bg-indigo-600 text-white border-indigo-600 scale-105' : 'bg-white text-gray-600 hover:bg-gray-100 border-gray-200'}`}
+                                    >
+                                        {genre}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Giới Thiệu (Mô tả)</label>
+                            <textarea rows="5" value={bookData.description} onChange={e => setBookData({...bookData, description: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -356,7 +460,6 @@ const EditBook = () => {
                             <strong>Lưu ý:</strong> Hãy tải file Word (.docx) mới lên để ghi đè nội dung. Nếu tên file đúng chuẩn <code className="bg-blue-100 px-1 rounded text-blue-900 font-bold">Số - Tên.docx</code>, hệ thống sẽ tự động cập nhật luôn cả số và tên chương mới cho bạn.
                         </div>
 
-                        {/* KHU VỰC KÉO THẢ FILE */}
                         <div className="border-2 border-dashed border-indigo-300 rounded-xl p-8 text-center bg-indigo-50/30 hover:bg-indigo-50/80 transition relative">
                             <input
                                 type="file"
@@ -371,10 +474,8 @@ const EditBook = () => {
                             </div>
                         </div>
 
-                        {/* HIỂN THỊ TRẠNG THÁI BÓC TÁCH */}
                         {extractingEdit && <div className="text-indigo-600 font-bold animate-pulse text-center mt-4">Đang bóc tách dữ liệu từ file...</div>}
                         
-                        {/* BẢNG PREVIEW THÔNG TIN SẼ GHI ĐÈ */}
                         {editingChapter.fileName && !extractingEdit && (
                             <div className="bg-green-50 p-5 rounded-xl border border-green-200 mt-4 animate-fade-in">
                                 <p className="text-sm text-green-700 font-bold mb-3 border-b border-green-200 pb-2">

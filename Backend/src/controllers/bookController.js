@@ -198,24 +198,30 @@ exports.getHotBooksWeekly = async (req, res) => {
 // GET /api/books/:idOrSlug
 exports.getBookById = async (req, res) => {
     try {
-        const { id } = req.params;
+        // 🛠️ FIX LỖI Ở ĐÂY: Lấy đúng tên biến idOrSlug từ Route
+        const identifier = req.params.idOrSlug || req.params.id;
+
+        if (!identifier) {
+            return res.status(400).json({ error: 'Thiếu định danh của truyện.' });
+        }
+
         let book;
 
         // Kiểm tra xem Param truyền vào là _id (24 ký tự) hay là slug (tên chữ)
-        if (mongoose.Types.ObjectId.isValid(id)) {
-            book = await Book.findById(id);
+        if (mongoose.Types.ObjectId.isValid(identifier)) {
+            book = await Book.findById(identifier);
         } else {
-            book = await Book.findOne({ slug: id }); // Tìm bằng slug
+            book = await Book.findOne({ slug: identifier }); // Tìm bằng slug
         }
 
         if (!book) {
-            return res.status(404).json({ error: 'Khong tim thay truyen.' });
+            return res.status(404).json({ error: 'Không tìm thấy truyện.' });
         }
 
         return res.status(200).json({ book });
     } catch (error) {
-        console.error('Loi API lay chi tiet truyen:', error);
-        return res.status(500).json({ error: 'Khong the lay chi tiet truyen.' });
+        console.error('Lỗi API lấy chi tiết truyện:', error);
+        return res.status(500).json({ error: 'Không thể lấy chi tiết truyện.' });
     }
 };
 
@@ -679,30 +685,36 @@ exports.getBooksAdvancedSearch = async (req, res) => {
     }
 };
 //////////////////////////////////////////////////////////////////////////
-// PUT /api/books/:id
+// PUT /api/books/:id (Bây giờ hỗ trợ cả ID và Slug)
 exports.updateBook = async (req, res) => {
     try {
         const { id } = req.params;
         const { title, author, description, cover_url, status, genres } = req.body;
 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return res.status(400).json({ success: false, message: 'ID truyện không hợp lệ.' });
+        let book;
+        
+        // 1. Phân biệt thông minh: Tìm bằng ID hoặc bằng Slug
+        if (mongoose.Types.ObjectId.isValid(id)) {
+            book = await Book.findById(id);
+        } else {
+            book = await Book.findOne({ slug: id });
         }
 
-        const book = await Book.findById(id);
         if (!book) {
             return res.status(404).json({ success: false, message: 'Không tìm thấy truyện.' });
         }
 
-        // Cập nhật các trường dữ liệu
+        // 2. Cập nhật các trường dữ liệu
         if (title) book.title = title.trim();
         if (author) book.author = author.trim();
         if (description !== undefined) book.description = description.trim();
         if (cover_url !== undefined) book.cover_url = cover_url.trim();
         if (status) book.status = status;
-        if (Array.isArray(genres)) book.genres = genres;
-
-        // Lưu ý: Không tự động đổi Slug khi đổi Tên truyện để tránh lỗi 404 cho các link đã share (Chuẩn SEO)
+        
+        // ĐẢM BẢO TOÀN VẸN DỮ LIỆU: Lưu mảng thể loại (genres)
+        if (Array.isArray(genres)) {
+            book.genres = genres;
+        }
 
         const updatedBook = await book.save();
 

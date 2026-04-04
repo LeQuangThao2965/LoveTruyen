@@ -112,8 +112,8 @@ const ReadChapter = () => {
                 setChapter(chapterData);
                 setChapterList(chapterListData);
             } catch (error) {
-                console.error('Loi load trang doc:', error);
-                setErrorMessage('Khong the tai trang doc cho chuong nay.');
+                console.error('Lỗi load trang:', error);
+                setErrorMessage('Không thể tải trang đọc chương này.');
                 setChapter(null);
                 setChapterList([]);
             } finally {
@@ -128,7 +128,7 @@ const ReadChapter = () => {
         () =>
             chapterList.map((item) => ({
                 value: item.chapter_number,
-                label: `Chuong ${item.chapter_number}`
+                label: `Chương ${item.chapter_number}`
             })),
         [chapterList]
     );
@@ -178,7 +178,7 @@ const ReadChapter = () => {
                 />
                 <div className="mx-auto max-w-4xl p-6">
                     <div className="rounded-xl border border-red-100 bg-red-50 p-6 text-sm text-red-700">
-                        {errorMessage || 'Chuong khong ton tai.'}
+                        {errorMessage || 'Chương không tồn tại.'}
                     </div>
                 </div>
             </div>
@@ -217,7 +217,7 @@ const ReadChapter = () => {
                             {book?.title || 'Truyen'}
                         </p>
                         <h1 className="mt-2 text-2xl font-extrabold md:text-3xl">
-                            Chuong {chapter.chapter_number}: {chapter.title}
+                            Chương {chapter.chapter_number}: {chapter.title}
                         </h1>
                     </header>
 
@@ -233,7 +233,7 @@ const ReadChapter = () => {
 
                 <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
                     <h3 className="text-sm font-bold uppercase tracking-wide text-gray-600">
-                        Dieu huong cuoi chuong
+                        Điều hướng
                     </h3>
 
                     <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -243,14 +243,14 @@ const ReadChapter = () => {
                             disabled={!prevChapterNumber}
                             className="rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {'<- Chuong truoc'}
+                            {'<- Chương trước'}
                         </button>
 
                         <Link
                             to={`/truyen/${book.slug || book._id}`}
                             className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
                         >
-                            Ve trang chi tiet truyen
+                            Quay lại bìa
                         </Link>
 
                         <button
@@ -259,16 +259,21 @@ const ReadChapter = () => {
                             disabled={!nextChapterNumber}
                             className="rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {'Chuong sau ->'}
+                            {'Chương sau ->'}
                         </button>
                     </div>
                 </section>
 
-                <MockComments
-                    storageKey={`mock_comments_book_${bookId}_chapter_${chapter.chapter_number}`}
-                    title="Binh luan chuong (frontend tam)"
-                    placeholder="Doc xong roi thi de lai binh luan..."
-                />
+
+                {/* ĐÃ SỬA: Bọc điều kiện book._id để chống lỗi 500 */}
+                {book?._id && (
+                    <MockComments
+                        bookId={book._id}
+                        chapterId={chapter.chapter_number}
+                        title={`Bình luận chương ${chapter.chapter_number}`}
+                        placeholder="Đọc xong rồi thì để lại bình luận nhé..."
+                    />
+                )}
             </main>
         </div>
     );
