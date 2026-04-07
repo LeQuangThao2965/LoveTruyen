@@ -21,5 +21,27 @@ export const storyService = {
     // 4. Lấy danh sách chương của 1 truyện
     getChapters: async (storyId) => {
         return await api.get(`/chapters/story/${storyId}`);
+    },
+
+    // ✅ THÊM HÀM MỚI: Lấy file Audio của chương truyện
+    getChapterAudio: async (chapterId) => {
+        return await api.get(`/tts/chapter/${chapterId}`);
+    },
+
+    // Lấy chi tiết sách/truyện theo ID hoặc Slug
+    getBookById: async (bookId) => {
+        return await api.get(`/books/${bookId}`);
+    },
+
+    // Lấy danh sách chương có phân trang
+    getAllChapters: async (bookId, page, limit) => {
+        return await api.get(`/chapters/story/${bookId}`, {
+            params: { page, limit }
+        });
+    },
+
+    // Lấy chi tiết 1 chương cụ thể
+    getChapterDetailByNumber: async (bookId, chapterNumber) => {
+        return await api.get(`/chapters/story/${bookId}/chapter/${chapterNumber}`);
     }
 };

@@ -3,9 +3,11 @@
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "google-tts-api": "^2.0.2",
     "mammoth": "^1.12.0",
     "mongodb": "^7.1.1",
     "mongoose": "^9.3.3",
+    "node-edge-tts": "^1.2.10",
     "react-quill-new": "^3.8.3"
   }
 }

@@ -2,8 +2,29 @@ const mongoose = require('mongoose');
 const Chapter = require('../models/Chapter');
 const Book = require('../models/Book');
 
+
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
+
+// ==========================================
+// HÀM TRỢ THỦ: Lột vỏ HTML lấy chữ thuần cho Audio
+// ==========================================
+const extractPlainText = (htmlContent) => {
+    if (!htmlContent) return '';
+    
+    // 1. Thay thế ngắt dòng thành dấu chấm để AI ngắt nghỉ đúng nhịp
+    let text = htmlContent.replace(/<br\s*\/?>/gi, '. ');
+    text = text.replace(/<\/p>/gi, '. ');
+    
+    // 2. Lột sạch mọi thẻ HTML còn sót lại
+    text = text.replace(/<[^>]+>/g, '');
+    
+    // 3. Dọn dẹp khoảng trắng thừa và ký tự đặc biệt
+    text = text.replace(/&nbsp;/g, ' ');
+    text = text.replace(/\s+/g, ' ').trim();
+    
+    return text;
+};
 
 // Hàm thông minh tự động dịch Slug thành _id của Book
 const resolveBookId = async (idOrSlug) => {
@@ -151,6 +172,10 @@ const normalizeChapter = (chapter, fallbackNumber = 0) => {
         title: chapter?.title || `Chuong ${chapterNumber}`,
         chapter_number: chapterNumber,
         content: chapter?.content || '',
+
+        // THÊM ĐÚNG DÒNG NÀY ĐỂ TRẢ VỀ TEXT SẠCH CHO AI ĐỌC
+        audio_text: extractPlainText(chapter?.content),
+
         createdAt: chapter?.createdAt,
         updatedAt: chapter?.updatedAt
     };

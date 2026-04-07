@@ -12,6 +12,10 @@ import MuteUserModal from './components/modals/MuteUserModal';
 import UserDetailsModal from './components/modals/UserDetailsModal';
 import ConfirmModal from './components/modals/ConfirmModal';
 
+//service
+import userService from '../../services/adminUserService';
+import adminUserService from '../../services/adminUserService';
+
 // Constants
 const PAGE_SIZE = 10;
 const DEBOUNCE_DELAY = 300;
@@ -66,8 +70,10 @@ const UsersManage = () => {
             if (filters.role) params.append('role', filters.role);
             if (filters.status) params.append('status', filters.status);
 
-            const data = await api.get(`/users?${params.toString()}`);
+            const data = await adminUserService.getUsers(params);
+
             setUsers(data.users || []);
+
             setPagination(prev => ({
                 ...prev,
                 total: data.pagination.total,
@@ -135,7 +141,7 @@ const UsersManage = () => {
     const getUserDetails = async (userId) => {
         setDetailsLoading(true);
         try {
-            const data = await api.get(`/users/${userId}/details`);
+            const data = await adminUserService.getUserDetails(userId);
             setUserDetails(data);
         } catch (error) {
             console.error('Error fetching user details:', error);
@@ -150,43 +156,6 @@ const UsersManage = () => {
         setSelectedUser(user);
         setModals(prev => ({ ...prev, details: true }));
         await getUserDetails(user.supabaseId);
-    };
-
-    // Ban user
-    const handleBanUser = async () => {
-        if (!banReason.trim()) {
-            toast.warning('Vui lòng nhập lý do khóa tài khoản');
-            return;
-        }
-
-        setProcessing(true);
-        try {
-            await api.post(`/users/${selectedUser.supabaseId}/ban`, { reason: banReason });
-            toast.success('Đã khóa tài khoản thành công');
-            closeModal('ban');
-            fetchUsers();
-        } catch (error) {
-            console.error('Error banning user:', error);
-            toast.error(error.response?.data?.message || 'Lỗi khi khóa tài khoản');
-        } finally {
-            setProcessing(false);
-        }
-    };
-
-    // Unban user
-    const handleUnbanUser = async () => {
-        setProcessing(true);
-        try {
-            await api.post(`/users/${selectedUser.supabaseId}/unban`);
-            toast.success('Đã mở khóa tài khoản thành công');
-            closeModal('confirmUnban');
-            fetchUsers();
-        } catch (error) {
-            console.error('Error unbanning user:', error);
-            toast.error(error.response?.data?.message || 'Lỗi khi mở khóa tài khoản');
-        } finally {
-            setProcessing(false);
-        }
     };
 
     // Toggle Ban/Unban user - Sử dụng API toggle-ban mới
@@ -234,9 +203,9 @@ const UsersManage = () => {
 
         setProcessing(true);
         try {
-            const response = await api.post(`/users/${selectedUser.supabaseId}/toggle-ban`, {
-                reason: banReason
-            });
+            const response = await adminUserService.toggleBanUser(
+                selectedUser.supabaseId, banReason
+            );
             
             toast.success(`Đã khóa tài khoản ${selectedUser.username}`);
             closeModal('ban');
@@ -259,7 +228,7 @@ const UsersManage = () => {
 
         setProcessing(true);
         try {
-            await api.patch(`/users/${selectedUser.supabaseId}/role`, { role: newRole });
+            await adminUserService.changeUserRole(selectedUser.supabaseId, newRole);
             toast.success('Đã cập nhật quyền user thành công');
             closeModal('role');
             fetchUsers();
@@ -285,10 +254,11 @@ const UsersManage = () => {
 
         setProcessing(true);
         try {
-            await api.post(`/users/${selectedUser.supabaseId}/mute`, { 
-                reason: muteReason,
-                duration: muteDuration // Thời gian tính bằng phút
-            });
+            await adminUserService.muteUser(
+                selectedUser.supabaseId, 
+                muteReason, 
+                muteDuration
+            );
             toast.success(`Đã cấm chat ${selectedUser.username} trong ${muteDuration} phút`);
             closeModal('mute');
             fetchUsers();
@@ -304,7 +274,7 @@ const UsersManage = () => {
     const handleUnmuteUser = async () => {
         setProcessing(true);
         try {
-            await api.post(`/users/${selectedUser.supabaseId}/unmute`);
+            await adminUserService.unmuteUser(selectedUser.supabaseId);
             toast.success('Đã bỏ cấm chat thành công');
             closeModal('confirmUnmute');
             fetchUsers();

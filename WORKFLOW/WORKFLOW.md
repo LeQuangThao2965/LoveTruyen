@@ -721,3 +721,50 @@ VITE_SUPABASE_ANON_KEY=xxx
 ## 4. GHI CHÚ QUAN TRỌNG CHO AI / DEVELOPER KẾ TIẾP
 - Hệ thống Auth hiện tại ưu tiên Supabase làm gốc (Nắm giữ Token/Session). MongoDB đóng vai trò lưu trữ Profile phụ (Role, Coins, Config). Mọi tương tác tìm kiếm User chéo giữa 2 bảng đều dựa vào field `supabaseId`.
 - Cấu hình Axios (`axiosConfig.js`) đã có sẵn Interceptor để tự động nhét Bearer Token vào header, đồng thời tự động bắt lỗi 403 (ACCOUNT_BANNED) để văng Toast, xóa localStorage và force Sign Out. Không cần phải tự viết check Banned lắt nhắt ở từng Component Frontend.
+
+
+# Overview project structure
+```
+LOVETRUYEN/
+├── frontend/                     # GIỮ NGUYÊN CẤU TRÚC HIỆN TẠI, CHỈ SỬA CÁCH DÙNG
+│   ├── src/
+│   │   ├── assets/...            
+│   │   ├── components/...        # Chỉ chứa UI và gọi Service (Không gọi axios trực tiếp)
+│   │   ├── pages/...             # Các trang chính (Views)
+│   │   ├── services/             # 🌟 TRÁI TIM GIAO TIẾP VỚI BACKEND
+│   │   │   ├── axiosConfig.js    # Cấu hình chung, interceptors [cite: 37, 38, 39]
+│   │   │   ├── storyService.js   # API cho truyện
+│   │   │   ├── userService.js    # API cho user
+│   │   │   ├── searchService.js  # API cho tìm kiếm
+│   │   │   └── ...
+│   │   └── App.jsx
+│
+└── Backend/
+    ├── src/
+    │   ├── configs/...           # Chứa file kết nối DB, Supabase
+    │   ├── middlewares/...       # Chứa auth, admin checks
+    │   ├── models/...            # Định nghĩa Schema MongoDB (Book, User,...)
+    │   │
+    │   ├── repositories/         # 🌟 TẦNG TRUY VẤN DATABASE (MỚI) 
+    │   │   ├── bookRepo.js       # CHỈ chứa code: Book.find(), Book.aggregate() [cite: 18]
+    │   │   ├── userRepo.js
+    │   │   └── ...
+    │   │
+    │   ├── services/             # 🌟 TẦNG XỬ LÝ BUSINESS LOGIC (MỚI) 
+    │   │   ├── bookService.js    # Tính toán views, kiểm tra logic trước khi lưu
+    │   │   ├── userService.js    # Logic cấp quyền, tính toán thời gian ban user
+    │   │   └── ...
+    │   │
+    │   ├── controllers/          # 🌟 TẦNG API LAYER 
+    │   │   ├── bookController.js # Chỉ nhận req.body -> gọi Service -> res.json() 
+    │   │   ├── userController.js 
+    │   │   └── ...
+    │   │
+    │   ├── routes/               # GIỮ NGUYÊN
+    │   │   ├── bookRoutes.js     # Trỏ tới Controller tương ứng
+    │   │   ├── userRoutes.js
+    │   │   └── ...
+    │   │
+    │   └── server.js
+    └── .env
+```

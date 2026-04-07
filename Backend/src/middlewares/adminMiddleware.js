@@ -1,7 +1,24 @@
 // Backend/src/middlewares/adminMiddleware.js
 const UserProfile = require('../models/UserProfile');
 
-// Middleware kiểm tra role admin hoặc host
+// HÀM TRỢ THỦ: Tự động tìm hoặc tạo Profile trong mongoDB để tránh lặp code (Clean Code)
+const getProfile = async (user) => {
+    let profile = await UserProfile.findOne({ supabaseId: user.id });
+    
+    if (!profile) {
+        profile = new UserProfile({
+            supabaseId: user.id,
+            email: user.email,
+            username: user.email.split('@')[0],
+            role: 'user',
+            status: 'active'
+        });
+        await profile.save();
+    }
+    return profile;
+};
+
+// Middleware kiểm tra role admin
 const requireAdmin = async (req, res, next) => {
     try {
         if (!req.user) {
@@ -9,25 +26,9 @@ const requireAdmin = async (req, res, next) => {
         }
 
         // Chỉ lấy role từ MongoDB
-        const profile = await UserProfile.findOne({ supabaseId: req.user.id });
-        
-        if (!profile) {
-            // Auto-create nếu chưa có (để tránh lỗi)
-            const newProfile = new UserProfile({
-                supabaseId: req.user.id,
-                email: req.user.email,
-                username: req.user.email.split('@')[0],
-                role: 'user',
-                status: 'active'
-            });
-            await newProfile.save();
-            
-            return res.status(403).json({ 
-                message: 'Tài khoản mới được tạo. Vui lòng đăng nhập lại.' 
-            });
-        }
-
-        if (!['admin', 'host', 'user'].includes(profile.role)) {
+        const profile = await getProfile(req.user);
+ 
+        if (!['admin', 'host'].includes(profile.role)) {
             return res.status(403).json({ 
                 message: 'Không có quyền truy cập! Yêu cầu quyền Admin hoặc Host.',
                 currentRole: profile.role 
@@ -46,11 +47,11 @@ const requireAdmin = async (req, res, next) => {
 const requireSuperAdmin = async (req, res, next) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ message: 'Không tìm thấy thông tin user!' });
+            return res.status(401).json({ message: 'Không tìm thấy thông tin admin!' });
         }
 
         // Chỉ lấy role từ MongoDB
-        const profile = await UserProfile.findOne({ supabaseId: req.user.id });
+        const profile = await getProfile(req.user);
         
         if (!profile) {
             // Auto-create nếu chưa có (để tránh lỗi)

@@ -4,6 +4,8 @@ import { supabase } from '../supabaseClient';
 import api from '../services/axiosConfig';
 import AuthModal from './AuthModal'; 
 import { FaHeart } from 'react-icons/fa';
+import userService from '../services/userService';
+import searchService from '../services/searchService';
 
 // Bộ Icon SVG tinh tế hơn (Đã xóa Settings, thêm Icon Admin & Host)
 const Icons = {
@@ -71,6 +73,14 @@ const Icons = {
 };
 
 const Header = () => {
+    //ta sử dụng useState(); để chuyển đổi trạng thái (thông tin) của
+    //biến đã cho vd user là biến đã cho & setUser là biến có tác
+    // dụng chuyển đổi (thay đổi/cập nhật) thông tin của biến user
+    // biến user mặc định cho là null
+    // sau khi backend lấy được data của user thì dùng hàm
+    // getProfile trong userService.js để lấy profile 
+    // thay vì gọi api trực tiếp trong đây. Ta sẽ có hàm xử lý phiên &
+    // lấy token để xác thực user, VD: setUser(session?.user || null); 
     const navigate = useNavigate();
     const [user, setUser] = useState(null);
     const [userRole, setUserRole] = useState('user'); // State riêng biệt cho Role
@@ -152,32 +162,26 @@ const Header = () => {
         const fetchProfileData = async () => {
             // Nếu chưa đăng nhập (không có ID) thì set Role mặc định và dừng lại
             if (!user?.id) {
-                setUserRole('user');
-                setDisplayName('');
+                setUserRole('guest');
+                setDisplayName('Guest');
                 setAvatarUrl('');
                 return;
             }
-
             try {
-                //1. Gọi API lấy role từ MongoDB
-                const response = await api.get('/users/me/profile');
-                
-                // Lưu ý: response từ axios thường nằm trong data, 
-                // nhưng tùy config interceptor của bạn mà nó có thể trả thẳng ra json
+                //1. ko gọi Api trực tiếp => dùng userService.js để gọi
+                //
+                const response = await userService.getProfile();
                 const profile = response?.profile || response?.data?.profile;
                 
-                // Cập nhật role
+                // Cập nhật role "profile?.role" giúp lấy role nếu profile có tồn tại, 
+                // nếu profile ko tồn tại thì trả về undefined tránh sập web
                 if (profile?.role) {
                     setUserRole(profile.role);
                 }
 
-                // 2. Gọi Supabase lấy display_name và avatar mới nhất
-                const { data: spProfile } = await supabase
-                    .from('profiles')
-                    .select('display_name, avatar_url, username')
-                    .eq('id', user.id)
-                    .single();
-
+                // 2. Gọi Supabase trong service để 
+                const spProfile = await userService.getSupabaseProfile(user.id);
+                // lấy display_name và avatar mới nhất
                 if (spProfile) {
                     // Ưu tiên: display_name -> username -> tên từ google
                     setDisplayName(spProfile.display_name || spProfile.username || user.user_metadata?.full_name);
@@ -185,7 +189,7 @@ const Header = () => {
                 }
             } catch (err) {
                 console.error('[Header] Failed to fetch profile from MongoDB:', err);
-                setUserRole('user');
+                setUserRole('guest');
                 // Lỗi 403 (Banned) đã được Axios Interceptor bắt và xử lý tự động rồi, không cần lo.
             }
         };
@@ -198,7 +202,7 @@ const Header = () => {
         await supabase.auth.signOut();
         localStorage.removeItem('access_token');
         setUser(null);
-        setUserRole('user');
+        setUserRole('guest');
         setIsDropdownOpen(false);
         setIsAdminDropdownOpen(false);
         navigate('/'); 
@@ -236,9 +240,8 @@ const Header = () => {
 
         setIsSuggestionsLoading(true);
         try {
-            const response = await api.get('/books/suggestions', {
-                params: { q: query.trim(), limit: 8 }
-            });
+            //here, head to service to use the function
+            const response = searchService.getSuggestions(query);
             setSuggestions(response || []);
             setSelectedSuggestionIndex(-1);
         } catch (error) {
