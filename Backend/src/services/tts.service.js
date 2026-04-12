@@ -3,6 +3,22 @@ const fs = require('fs');
 const path = require('path');
 const googleTTS = require('google-tts-api'); // 🚀 Vũ khí bí mật siêu trâu bò
 
+const Book = require('../models/Book');
+
+// 🛠️ HÀM TRỢ THỦ: Biến tên truyện Tiếng Việt thành Slug cực chuẩn
+// Ví dụ: "Đấu Phá Thương Khung 2!" -> "dau-pha-thuong-khung-2"
+const generateSlug = (str) => {
+    if (!str) return '';
+    return str.toString().toLowerCase()
+        .normalize('NFD') // Tách dấu ra khỏi ký tự
+        .replace(/[\u0300-\u036f]/g, '') // Xóa các dấu
+        .replace(/[đĐ]/g, 'd') // Xử lý riêng chữ Đ
+        .replace(/([^0-9a-z-\s])/g, '') // Xóa các ký tự đặc biệt (!, ?, @, ...)
+        .replace(/(\s+)/g, '-') // Thay khoảng trắng bằng dấu gạch ngang
+        .replace(/-+/g, '-') // Xóa các dấu gạch ngang thừa liên tiếp
+        .replace(/^-+|-+$/g, ''); // Cắt gạch ngang ở đầu và cuối
+};
+
 exports.generateChapterAudio = async (chapter) => {
     try {
         if (!chapter || !chapter.content) throw new Error("Chương truyện rỗng");
@@ -22,10 +38,19 @@ exports.generateChapterAudio = async (chapter) => {
         const audioDir = path.resolve(__dirname, '../../public/audio');
         if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir, { recursive: true });
 
-        // TÊN FILE
-        const fileName = `chapter_${chapter._id}.mp3`;
-        const finalFilePath = path.join(audioDir, fileName);
+        // ✅ 1. TÌM THÔNG TIN TRUYỆN TỪ DATABASE
+        const bookInfo = await Book.findById(chapter.book_id || chapter.storyId);
+        
+        // 🚀 CÔNG NGHỆ CHỐNG MÙ: 
+        // Ưu tiên 1: Lấy slug có sẵn
+        // Ưu tiên 2: Nếu DB không có slug, lấy Title truyện tự ép thành slug
+        // Ưu tiên 3: Nếu truyện lỗi đến mức không có cả title, mới xài ID
+        const bookAlias = bookInfo?.slug || generateSlug(bookInfo?.title) || chapter.book_id.toString();
 
+        // TÊN FILE THÔNG MINH, TỰ DOCUMENT
+        const fileName = `${bookAlias}_chuong_${chapter.chapter_number}.mp3`;
+        const finalFilePath = path.join(audioDir, fileName);
+        
         // NẾU CÓ FILE RỒI THÌ LẤY XÀI LUÔN
         if (fs.existsSync(finalFilePath)) {
             return { url: `/audio/${fileName}` };
